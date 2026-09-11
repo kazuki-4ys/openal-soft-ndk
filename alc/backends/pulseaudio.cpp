@@ -28,7 +28,6 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
-#include <concepts>
 #include <cstring>
 #include <limits>
 #include <mutex>
@@ -48,16 +47,13 @@
 #include "dynload.h"
 #include "opthelpers.h"
 #include "strutils.hpp"
-#include "zstring_view.hpp"
 
 #include <pulse/pulseaudio.h>
 
 #if HAVE_CXXMODULES
-import format.zsv;
 import gsl;
 import logging;
 #else
-#include "alformatzsv.hpp"
 #include "core/logging.h"
 #include "gsl/gsl"
 #endif
@@ -507,7 +503,7 @@ struct MainloopUniqueLock : public std::unique_lock<PulseMainloop> {
     auto wait() const -> void
     { pa_threaded_mainloop_wait(mutex()->mLoop); }
 
-    template<std::predicate Predicate>
+    template<typename Predicate>
     auto wait(Predicate done_waiting) const -> void
     { while(!done_waiting()) wait(); }
 
@@ -1468,7 +1464,7 @@ auto PulseBackendFactory::init() -> bool
 #if HAVE_DYNLOAD
     if(!pulse_handle)
     {
-        auto constexpr pulse_lib = al::zstring_view{PULSE_LIB};
+        auto *const pulse_lib = gsl::czstring{PULSE_LIB};
         if(auto const libresult = LoadLib(pulse_lib))
             pulse_handle = libresult.value();
         else
@@ -1477,19 +1473,21 @@ auto PulseBackendFactory::init() -> bool
             return false;
         }
 
-        static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name)
-            -> bool
+        static constexpr auto load_func = [](auto *&func, gsl::czstring const name) -> bool
         {
-            return GetSymbolAddress<T>(pulse_handle, name)
-                .transform_error([name](std::string_view const err) {
-                    WARN("Failed to load symbol {}: {}", name, err);
-                    return false;
-                })
-                .transform([&func](T *addr) { func = addr; })
-                .has_value();
+            using func_t = std::remove_reference_t<decltype(func)>;
+            auto const funcresult = GetSymbol(pulse_handle, name);
+            if(!funcresult)
+            {
+                WARN("Failed to load function {}: {}", name, funcresult.error());
+                return false;
+            }
+            /* NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) */
+            func = reinterpret_cast<func_t>(funcresult.value());
+            return true;
         };
         auto ok = true;
-#define LOAD_FUNC(f) ok &= load_sym(p##f, #f)
+#define LOAD_FUNC(f) ok &= load_func(p##f, #f)
         PULSE_FUNCS(LOAD_FUNC)
 #undef LOAD_FUNC
         if(!ok)

@@ -13,7 +13,7 @@
 #include "core/bufferline.h"
 #include "core/cubic_defs.h"
 #include "core/mixer/hrtfdefs.h"
-#include "core/resampler_limits.hpp"
+#include "core/resampler_limits.h"
 #include "defs.h"
 #include "gsl/gsl"
 #include "hrtfbase.h"

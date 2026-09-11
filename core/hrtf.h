@@ -16,7 +16,6 @@
 #include "flexarray.h"
 #include "intrusive_ptr.h"
 #include "mixer/hrtfdefs.h"
-#include "opthelpers.h"
 
 
 struct HrtfStore {
@@ -43,7 +42,7 @@ struct HrtfStore {
     std::span<u8x2 const> mDelays;
 
     void getCoeffs(float elevation, float azimuth, float distance, float spread,
-        HrirSpan coeffs, std::span<unsigned, 2> delays) const noexcept NONBLOCKING;
+        HrirSpan coeffs, std::span<unsigned, 2> delays) const;
 
     void inc_ref() noexcept;
     void dec_ref() noexcept;

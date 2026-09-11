@@ -1,0 +1,9 @@
+#ifndef ALSOFT_VERSION_H
+#define ALSOFT_VERSION_H
+
+#define ALSOFT_VERSION "1.23.1"
+#define ALSOFT_VERSION_NUM 1,23,1,0
+#define ALSOFT_GIT_COMMIT_HASH ""
+#define ALSOFT_GIT_BRANCH ""
+
+#endif

@@ -60,7 +60,6 @@
 
 #ifdef GHC_USE_STD_FS
     #include <filesystem>
-    #include <fstream>
     namespace fs {
         using namespace std::filesystem;
         using ifstream = std::ifstream;

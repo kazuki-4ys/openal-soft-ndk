@@ -90,7 +90,7 @@ constexpr auto HilStep = HilSize / OversampleFactor;
 auto &gWindow = gHannWindow<HilSize>;
 
 
-struct FshifterState final : EffectState {
+struct FshifterState final : public EffectState {
     /* Effect parameters */
     size_t mCount{};
     size_t mPos{};
@@ -133,9 +133,9 @@ struct FshifterState final : EffectState {
 
     void deviceUpdate(const DeviceBase *device, const BufferStorage *buffer) override;
     void update(const ContextBase *context, const EffectSlotBase *slot, const EffectProps *props,
-        EffectTarget target) noexcept NONBLOCKING override;
-    void process(size_t samplesToDo, std::span<const FloatBufferLine> samplesIn,
-        std::span<FloatBufferLine> samplesOut) noexcept override;
+        const EffectTarget target) override;
+    void process(const size_t samplesToDo, const std::span<const FloatBufferLine> samplesIn,
+        const std::span<FloatBufferLine> samplesOut) override;
 };
 
 void FshifterState::deviceUpdate(DeviceBase const *device, BufferStorage const*)
@@ -156,8 +156,7 @@ void FshifterState::deviceUpdate(DeviceBase const *device, BufferStorage const*)
         auto const splitter = BandSplitter{device->mXOverFreq
             / static_cast<float>(device->mSampleRate)};
 
-        using upsampler_t = decltype(mUpsampler)::value_type;
-        auto &upsampler = mUpsampler.emplace(upsampler_t{});
+        auto &upsampler = mUpsampler.emplace();
         for(auto &chandata : upsampler)
         {
             chandata.mHfScale = hfscales[idx];
@@ -169,9 +168,9 @@ void FshifterState::deviceUpdate(DeviceBase const *device, BufferStorage const*)
 }
 
 void FshifterState::update(const ContextBase *context, const EffectSlotBase *slot,
-    const EffectProps *props_, const EffectTarget target) noexcept NONBLOCKING
+    const EffectProps *props_, const EffectTarget target)
 {
-    auto &props = IGNORE_FUNCTION_EFFECTS(std::get<FshifterProps>(*props_));
+    auto &props = std::get<FshifterProps>(*props_);
     auto const device = al::get_not_null(context->mDevice);
 
     const auto step = props.Frequency / static_cast<float>(device->mSampleRate);
@@ -221,7 +220,7 @@ void FshifterState::update(const ContextBase *context, const EffectSlotBase *slo
 
     if(mUpsampler.has_value())
     {
-        auto &upsampler = *mUpsampler;
+        auto &upsampler = mUpsampler.value();
         const auto upmatrix = std::span{AmbiScale::FirstOrderUp};
 
         auto const outgain = slot->Gain;
@@ -235,7 +234,6 @@ void FshifterState::update(const ContextBase *context, const EffectSlotBase *slo
 
 void FshifterState::process(const size_t samplesToDo,
     const std::span<const FloatBufferLine> samplesIn, const std::span<FloatBufferLine> samplesOut)
-    noexcept NONBLOCKING
 {
     /* Clear the B-Format buffer that accumulates the result. */
     for(auto &outbuf : mBBuffer)
@@ -334,7 +332,7 @@ void FshifterState::process(const size_t samplesToDo,
     /* Now, mix the processed sound data to the output. */
     if(mUpsampler.has_value())
     {
-        auto &upsampler = *mUpsampler;
+        auto &upsampler = mUpsampler.value();
         auto chandata = mChans.begin();
         for(const auto c : std::views::iota(0_uz, NumLines))
         {

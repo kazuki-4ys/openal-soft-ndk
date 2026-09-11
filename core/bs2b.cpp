@@ -104,8 +104,7 @@ void bs2b_processor::clear()
     history.fill(t_last_sample{});
 }
 
-void bs2b_processor::cross_feed(const std::span<float> Left, const std::span<float> Right) noexcept
-    NONBLOCKING
+void bs2b_processor::cross_feed(const std::span<float> Left, const std::span<float> Right)
 {
     const auto a0lo = a0_lo;
     const auto b1lo = b1_lo;

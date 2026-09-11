@@ -49,7 +49,6 @@
 #include "gsl/gsl"
 #include "ringbuffer.h"
 #include "strutils.hpp"
-#include "zstring_view.hpp"
 
 /* MinGW-w64 needs this for some unknown reason now. */
 using LPCWAVEFORMATEX = const WAVEFORMATEX*;
@@ -85,10 +84,8 @@ DEFINE_GUID(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, 0x00000003, 0x0000, 0x0010, 0x80, 0
 #endif
 
 #if HAVE_CXXMODULES
-import format.zsv;
 import logging;
 #else
-#include "alformatzsv.hpp"
 #include "core/logging.h"
 #endif
 
@@ -751,28 +748,29 @@ auto DSoundBackendFactory::init() -> bool
 #if HAVE_DYNLOAD
     if(!ds_handle)
     {
-        auto constexpr dsound_lib = al::zstring_view{"dsound.dll"};
-        if(auto libresult = LoadLib(dsound_lib); libresult.has_value())
+        if(auto libresult = LoadLib("dsound.dll"))
             ds_handle = libresult.value();
         else
         {
-            WARN("Failed to load {}: {}", dsound_lib, libresult.error());
+            WARN("Failed to load dsound.dll: {}", libresult.error());
             return false;
         }
 
-        static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name)
-            -> bool
+        static constexpr auto load_func = [](auto *&func, const char *name) -> bool
         {
-            return GetSymbolAddress<T>(ds_handle, name)
-                .transform_error([name](std::string_view const err) {
-                    WARN("Failed to load symbol {}: {}", name, err);
-                    return false;
-                })
-                .transform([&func](T *addr) { func = addr; })
-                .has_value();
+            using func_t = std::remove_reference_t<decltype(func)>;
+            auto funcresult = GetSymbol(ds_handle, name);
+            if(!funcresult)
+            {
+                WARN("Failed to load function {}: {}", name, funcresult.error());
+                return false;
+            }
+            /* NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) */
+            func = reinterpret_cast<func_t>(funcresult.value());
+            return true;
         };
         auto ok = true;
-#define LOAD_FUNC(f) ok &= load_sym(p##f, #f)
+#define LOAD_FUNC(f) ok &= load_func(p##f, #f)
         LOAD_FUNC(DirectSoundCreate);
         LOAD_FUNC(DirectSoundEnumerateW);
         LOAD_FUNC(DirectSoundCaptureCreate);

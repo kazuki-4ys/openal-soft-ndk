@@ -8,7 +8,6 @@
 
 #include "core/bufferline.h"
 #include "intrusive_ptr.h"
-#include "opthelpers.h"
 
 struct BufferStorage;
 struct ContextBase;
@@ -194,7 +193,7 @@ struct EffectTarget {
     RealMixParams *RealOut;
 };
 
-struct EffectState : al::intrusive_ref<EffectState> {
+struct EffectState : public al::intrusive_ref<EffectState> {
     std::span<FloatBufferLine> mOutTarget;
 
 
@@ -202,10 +201,10 @@ struct EffectState : al::intrusive_ref<EffectState> {
 
     virtual void deviceUpdate(const DeviceBase *device, const BufferStorage *buffer) = 0;
     virtual void update(const ContextBase *context, const EffectSlotBase *slot,
-        const EffectProps *props, EffectTarget target) noexcept NONBLOCKING = 0;
-    virtual void process(size_t samplesToDo,
-        std::span<const FloatBufferLine> samplesIn,
-        std::span<FloatBufferLine> samplesOut) noexcept NONBLOCKING = 0;
+        const EffectProps *props, const EffectTarget target) = 0;
+    virtual void process(const size_t samplesToDo,
+        const std::span<const FloatBufferLine> samplesIn,
+        const std::span<FloatBufferLine> samplesOut) = 0;
 };
 
 

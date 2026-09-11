@@ -11,13 +11,13 @@
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <utility>
 
 #include "almalloc.h"
 #include "alnumeric.h"
@@ -59,7 +59,7 @@ void DirectorySearch(const fs::path &path, const std::string_view ext,
             if(fs::status(entrypath).type() != fs::file_type::regular)
                 continue;
             const auto u8ext = entrypath.extension().u8string();
-            if(is_eq(al::case_compare(al::u8_as_char(u8ext), ext)))
+            if(al::case_compare(al::u8_as_char(u8ext), ext) == 0)
                 results->emplace_back(al::u8_as_char(entrypath.u8string()));
         }
     }
@@ -375,7 +375,7 @@ auto SearchDataFiles(const std::string_view ext, const std::string_view subdir)
 
 namespace {
 
-bool SetRTPriorityPthread(int const prio [[maybe_unused]])
+bool SetRTPriorityPthread(int prio [[maybe_unused]])
 {
     auto err = ENOTSUP;
 #if defined(HAVE_PTHREAD_SETSCHEDPARAM) && !defined(__OpenBSD__)
@@ -403,64 +403,62 @@ bool SetRTPriorityPthread(int const prio [[maybe_unused]])
 bool SetRTPriorityRTKit(int prio [[maybe_unused]])
 {
 #if HAVE_RTKIT
-    auto const rtkit = RTKit::Create();
-    if(not rtkit) return false;
+    auto const conn = rtkit_get_dbus_connection();
+    if(!conn) return false;
 
-    auto const nicemin = rtkit.get_min_nice_level();
-    if(not nicemin.has_value())
+    auto nicemin = int{};
+    auto err = rtkit_get_min_nice_level(conn.get(), &nicemin);
+    if(err == -ENOENT)
     {
-        auto const err = std::make_error_code(nicemin.error());
-        ERR("Could not query RTKit: {} ({})", err.message(), err.value());
+        err = std::abs(err);
+        ERR("Could not query RTKit: {} ({})", std::generic_category().message(err), err);
         return false;
     }
-    auto rtmax = rtkit.get_max_realtime_priority();
-    if(not rtmax.has_value())
-    {
-        auto const err = std::make_error_code(rtmax.error());
-        ERR("Could not get max realtime priority: {} ({})", err.message(), err.value());
-        return false;
-    }
-    TRACE("Maximum real-time priority: {}, minimum niceness: {}", *rtmax, *nicemin);
+    auto rtmax = rtkit_get_max_realtime_priority(conn.get());
+    TRACE("Maximum real-time priority: {}, minimum niceness: {}", rtmax, nicemin);
 
-    if(*rtmax > 0)
+    static constexpr auto limit_rttime = [](DBusConnection *c) -> int
+    {
+        using ulonglong = unsigned long long;
+        const auto maxrttime = rtkit_get_rttime_usec_max(c);
+        if(maxrttime <= 0) return gsl::narrow_cast<int>(std::abs(maxrttime));
+        const auto umaxtime = gsl::narrow_cast<ulonglong>(maxrttime);
+
+        auto rlim = rlimit{};
+        if(getrlimit(RLIMIT_RTTIME, &rlim) != 0)
+            return errno;
+
+        TRACE("RTTime max: {} (hard: {}, soft: {})", umaxtime, rlim.rlim_max, rlim.rlim_cur);
+        if(rlim.rlim_max > umaxtime)
+        {
+            rlim.rlim_max = al::saturate_cast<rlim_t>(umaxtime);
+            rlim.rlim_cur = std::min(rlim.rlim_cur, rlim.rlim_max);
+            if(setrlimit(RLIMIT_RTTIME, &rlim) != 0)
+                return errno;
+        }
+        return 0;
+    };
+    if(rtmax > 0)
     {
         if(AllowRTTimeLimit)
         {
-            auto const res = rtkit.get_rttime_usec_max()
-                .and_then([](long long const maxtime) -> rtkitret_t<void>
-                {
-                    auto rlim = rlimit{};
-                    if(getrlimit(RLIMIT_RTTIME, &rlim) != 0)
-                        return al::unexpected(std::errc{errno});
-
-                    TRACE("RTTime max: {} (hard: {}, soft: {})", maxtime, rlim.rlim_max,
-                        rlim.rlim_cur);
-                    if(maxtime > 0 and std::cmp_greater(rlim.rlim_max, maxtime))
-                    {
-                        rlim.rlim_max = al::saturate_cast<rlim_t>(maxtime);
-                        rlim.rlim_cur = std::min(rlim.rlim_cur, rlim.rlim_max);
-                        if(setrlimit(RLIMIT_RTTIME, &rlim) != 0)
-                            return al::unexpected(std::errc{errno});
-                    }
-                    return {};
-                });
-            if(not res.has_value())
-            {
-                auto const err = std::make_error_code(res.error());
-                WARN("Failed to set RLIMIT_RTTIME for RTKit: {} ({})", err.message(), err.value());
-            }
+            err = limit_rttime(conn.get());
+            if(err != 0)
+                WARN("Failed to set RLIMIT_RTTIME for RTKit: {} ({})",
+                    std::generic_category().message(err), err);
         }
 
         /* Limit the maximum real-time priority to half. */
-        *rtmax = (*rtmax+1)/2;
-        prio = std::clamp(prio, 1, *rtmax);
+        rtmax = (rtmax+1)/2;
+        prio = std::clamp(prio, 1, rtmax);
 
-        TRACE("Making real-time with priority {} (max: {})", prio, *rtmax);
-        auto const res = rtkit.make_realtime(0, prio);
-        if(res.has_value()) return true;
+        TRACE("Making real-time with priority {} (max: {})", prio, rtmax);
+        err = rtkit_make_realtime(conn.get(), 0, prio);
+        if(err == 0) return true;
 
-        auto const err = std::make_error_code(res.error());
-        WARN("Failed to set real-time priority: {} ({})", err.message(), err.value());
+        err = std::abs(err);
+        WARN("Failed to set real-time priority: {} ({})",
+            std::generic_category().message(err), err);
     }
     /* Don't try to set the niceness for non-Linux systems. Standard POSIX has
      * niceness as a per-process attribute, while the intent here is for the
@@ -468,14 +466,14 @@ bool SetRTPriorityRTKit(int prio [[maybe_unused]])
      * Linux is known to have per-thread niceness.
      */
 #ifdef __linux__
-    if(*nicemin < 0)
+    if(nicemin < 0)
     {
-        TRACE("Making high priority with niceness {}", *nicemin);
-        auto const res = rtkit.make_high_priority(0, *nicemin);
-        if(res.has_value()) return true;
+        TRACE("Making high priority with niceness {}", nicemin);
+        err = rtkit_make_high_priority(conn.get(), 0, nicemin);
+        if(err == 0) return true;
 
-        auto const err = std::make_error_code(res.error());
-        WARN("Failed to set high priority: {} ({})", err.message(), err.value());
+        err = std::abs(err);
+        WARN("Failed to set high priority: {} ({})", std::generic_category().message(err), err);
     }
 #endif /* __linux__ */
 

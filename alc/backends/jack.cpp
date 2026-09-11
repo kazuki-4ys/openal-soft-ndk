@@ -41,16 +41,13 @@
 #include "gsl/gsl"
 #include "opthelpers.h"
 #include "ringbuffer.h"
-#include "zstring_view.hpp"
 
 #include <jack/jack.h>
 #include <jack/ringbuffer.h>
 
 #if HAVE_CXXMODULES
-import format.zsv;
 import logging;
 #else
-#include "alformatzsv.hpp"
 #include "core/logging.h"
 #endif
 
@@ -137,7 +134,7 @@ auto jack_load() -> bool
 #if HAVE_DYNLOAD
     if(!jack_handle)
     {
-        auto constexpr jack_lib = al::zstring_view{JACK_LIB};
+        const char *jack_lib = JACK_LIB;
         if(auto libresult = LoadLib(jack_lib))
             jack_handle = libresult.value();
         else
@@ -146,19 +143,21 @@ auto jack_load() -> bool
             return false;
         }
 
-        static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name)
-            -> bool
+        static constexpr auto load_func = [](auto *&func, const char *name) -> bool
         {
-            return GetSymbolAddress<T>(jack_handle, name)
-                .transform_error([name](std::string_view const err) {
-                    WARN("Failed to load symbol {}: {}", name, err);
-                    return false;
-                })
-                .transform([&func](T *addr) { func = addr; })
-                .has_value();
+            using func_t = std::remove_reference_t<decltype(func)>;
+            auto funcresult = GetSymbol(jack_handle, name);
+            if(!funcresult)
+            {
+                WARN("Failed to load function {}: {}", name, funcresult.error());
+                return false;
+            }
+            /* NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) */
+            func = reinterpret_cast<func_t>(funcresult.value());
+            return true;
         };
         auto ok = true;
-#define LOAD_FUNC(f) ok &= load_sym(p##f, #f)
+#define LOAD_FUNC(f) ok &= load_func(p##f, #f)
         JACK_FUNCS(LOAD_FUNC)
 #undef LOAD_FUNC
         if(!ok)
@@ -169,7 +168,7 @@ auto jack_load() -> bool
         }
 
         /* Optional symbols. These don't exist in all versions of JACK. */
-#define LOAD_SYM(f) std::ignore = load_sym(p##f, #f)
+#define LOAD_SYM(f) std::ignore = load_func(p##f, #f)
         LOAD_SYM(jack_error_callback);
 #undef LOAD_SYM
     }

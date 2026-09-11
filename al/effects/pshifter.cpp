@@ -86,17 +86,12 @@ void PshifterEffectHandler::GetParamfv(al::Context *context, const PshifterProps
 #if ALSOFT_EAX
 namespace {
 
-/* NOLINTNEXTLINE(clazy-copyable-polymorphic) Exceptions must be copyable. */
-struct EaxPitchShifterException final : EaxException {
-    explicit EaxPitchShifterException(std::string_view const message)
-        : EaxException{"EAX_PITCH_SHIFTER_EFFECT", message}
-    { }
-};
+using PitchShifterCommitter = EaxCommitter<EaxPitchShifterCommitter>;
 
 struct CoarseTuneValidator {
     void operator()(eax_long const lCoarseTune) const
     {
-        eax_validate_range<EaxPitchShifterException>(
+        eax_validate_range<PitchShifterCommitter::Exception>(
             "Coarse Tune",
             lCoarseTune,
             EAXPITCHSHIFTER_MINCOARSETUNE,
@@ -107,7 +102,7 @@ struct CoarseTuneValidator {
 struct FineTuneValidator {
     void operator()(eax_long const lFineTune) const
     {
-        eax_validate_range<EaxPitchShifterException>(
+        eax_validate_range<PitchShifterCommitter::Exception>(
             "Fine Tune",
             lFineTune,
             EAXPITCHSHIFTER_MINFINETUNE,
@@ -125,11 +120,17 @@ struct AllValidator {
 
 } // namespace
 
-template<> [[noreturn]]
-void EaxPitchShifterCommitter::fail(std::string_view const message)
-{ throw EaxPitchShifterException{message}; }
+template<> /* NOLINTNEXTLINE(clazy-copyable-polymorphic) Exceptions must be copyable. */
+struct PitchShifterCommitter::Exception final : EaxException {
+    explicit Exception(const std::string_view message)
+        : EaxException{"EAX_PITCH_SHIFTER_EFFECT", message}
+    { }
+};
 
-template<>
+template<> [[noreturn]]
+void PitchShifterCommitter::fail(const std::string_view message)
+{ throw Exception{message}; }
+
 auto EaxPitchShifterCommitter::commit(const EAXPITCHSHIFTERPROPERTIES &props) const -> bool
 {
     if(auto *cur = std::get_if<EAXPITCHSHIFTERPROPERTIES>(&mEaxProps); cur && *cur == props)
@@ -143,7 +144,6 @@ auto EaxPitchShifterCommitter::commit(const EAXPITCHSHIFTERPROPERTIES &props) co
     return true;
 }
 
-template<>
 void EaxPitchShifterCommitter::SetDefaults(EaxEffectProps &props)
 {
     props = EAXPITCHSHIFTERPROPERTIES{
@@ -151,7 +151,6 @@ void EaxPitchShifterCommitter::SetDefaults(EaxEffectProps &props)
         .lFineTune = EAXPITCHSHIFTER_DEFAULTFINETUNE};
 }
 
-template<>
 void EaxPitchShifterCommitter::Get(const EaxCall &call, const EAXPITCHSHIFTERPROPERTIES &props)
 {
     switch(call.get_property_id())
@@ -164,7 +163,6 @@ void EaxPitchShifterCommitter::Get(const EaxCall &call, const EAXPITCHSHIFTERPRO
     }
 }
 
-template<>
 void EaxPitchShifterCommitter::Set(const EaxCall &call, EAXPITCHSHIFTERPROPERTIES &props)
 {
     switch(call.get_property_id())

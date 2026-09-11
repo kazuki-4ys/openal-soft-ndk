@@ -1076,14 +1076,14 @@ auto InitHrtfPanning(al::Device *const device) -> std::unique_ptr<DirectHrtfStat
         };
 
         auto mode = std::string_view{*modeopt};
-        if(is_eq(al::case_compare(mode, "basic"sv)))
+        if(al::case_compare(mode, "basic"sv) == 0)
         {
             ERR(R"(HRTF mode "{}" deprecated, substituting "{}")", *modeopt, "ambi2");
             mode = "ambi2";
         }
 
         auto iter = std::ranges::find_if(hrtf_modes, [mode](const HrtfModeEntry &entry) -> bool
-        { return is_eq(al::case_compare(mode, entry.name)); });
+        { return al::case_compare(mode, entry.name) == 0; });
         if(iter == hrtf_modes.end())
             ERR("Unexpected hrtf-mode: {}", *modeopt);
         else

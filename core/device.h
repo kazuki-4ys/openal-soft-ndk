@@ -27,7 +27,7 @@
 #include "gsl/gsl"
 #include "intrusive_ptr.h"
 #include "mixer/hrtfdefs.h"
-#include "resampler_limits.hpp"
+#include "resampler_limits.h"
 #include "vector.h"
 
 class BFormatDec;
@@ -170,7 +170,7 @@ struct UhjPostProcess {
 };
 
 struct TsmePostProcess {
-    std::unique_ptr<EncoderBase> mTsmeEncoder;
+    std::unique_ptr<EncoderBase> mUhjEncoder;
 };
 
 struct StablizerPostProcess {
@@ -360,7 +360,7 @@ struct DeviceBase {
     }
 
     /** Waits for the mixer to not be mixing or updating the clock. */
-    [[nodiscard]] auto waitForMix() const noexcept BLOCKING -> unsigned
+    [[nodiscard]] auto waitForMix() const noexcept -> unsigned
     {
         auto refcount = mMixCount.load(std::memory_order_acquire);
         while((refcount&1)) refcount = mMixCount.load(std::memory_order_acquire);
@@ -391,9 +391,8 @@ struct DeviceBase {
     void Process(StablizerPostProcess const &proc, std::size_t SamplesToDo);
     void Process(Bs2bPostProcess const &proc, std::size_t SamplesToDo);
 
-    void renderSamples(std::span<void*const> outBuffers, unsigned numSamples) noexcept NONBLOCKING;
-    void renderSamples(void *outBuffer, unsigned numSamples, std::size_t frameStep) noexcept
-        NONBLOCKING;
+    void renderSamples(std::span<void*const> outBuffers, unsigned numSamples);
+    void renderSamples(void *outBuffer, unsigned numSamples, std::size_t frameStep);
 
     /* Caller must lock the device state, and the mixer must not be running. */
     void doDisconnect(std::string&& msg);
@@ -404,7 +403,7 @@ struct DeviceBase {
 
 private:
     [[nodiscard]]
-    auto renderSamples(unsigned numSamples) noexcept NONBLOCKING -> unsigned;
+    auto renderSamples(unsigned numSamples) -> unsigned;
 
 protected:
     explicit DeviceBase(DeviceType type);

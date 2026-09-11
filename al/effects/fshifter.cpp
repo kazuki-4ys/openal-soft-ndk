@@ -141,17 +141,12 @@ void FshifterEffectHandler::GetParamfv(al::Context *context, const FshifterProps
 #if ALSOFT_EAX
 namespace {
 
-/* NOLINTNEXTLINE(clazy-copyable-polymorphic) Exceptions must be copyable. */
-struct EaxFrequencyShifterException final : EaxException {
-    explicit EaxFrequencyShifterException(std::string_view const message)
-        : EaxException{"EAX_FREQUENCY_SHIFTER_EFFECT", message}
-    { }
-};
+using FrequencyShifterCommitter = EaxCommitter<EaxFrequencyShifterCommitter>;
 
 struct FrequencyValidator {
     void operator()(float const flFrequency) const
     {
-        eax_validate_range<EaxFrequencyShifterException>(
+        eax_validate_range<FrequencyShifterCommitter::Exception>(
             "Frequency",
             flFrequency,
             EAXFREQUENCYSHIFTER_MINFREQUENCY,
@@ -162,7 +157,7 @@ struct FrequencyValidator {
 struct LeftDirectionValidator {
     void operator()(eax_ulong const ulLeftDirection) const
     {
-        eax_validate_range<EaxFrequencyShifterException>(
+        eax_validate_range<FrequencyShifterCommitter::Exception>(
             "Left Direction",
             ulLeftDirection,
             EAXFREQUENCYSHIFTER_MINLEFTDIRECTION,
@@ -173,7 +168,7 @@ struct LeftDirectionValidator {
 struct RightDirectionValidator {
     void operator()(eax_ulong const ulRightDirection) const
     {
-        eax_validate_range<EaxFrequencyShifterException>(
+        eax_validate_range<FrequencyShifterCommitter::Exception>(
             "Right Direction",
             ulRightDirection,
             EAXFREQUENCYSHIFTER_MINRIGHTDIRECTION,
@@ -192,11 +187,17 @@ struct AllValidator {
 
 } // namespace
 
-template<> [[noreturn]]
-void EaxFrequencyShifterCommitter::fail(std::string_view const message)
-{ throw EaxFrequencyShifterException{message}; }
+template<> /* NOLINTNEXTLINE(clazy-copyable-polymorphic) Exceptions must be copyable. */
+struct FrequencyShifterCommitter::Exception final : EaxException {
+    explicit Exception(const std::string_view message)
+        : EaxException{"EAX_FREQUENCY_SHIFTER_EFFECT", message}
+    { }
+};
 
-template<>
+template<> [[noreturn]]
+void FrequencyShifterCommitter::fail(const std::string_view message)
+{ throw Exception{message}; }
+
 auto EaxFrequencyShifterCommitter::commit(const EAXFREQUENCYSHIFTERPROPERTIES &props) const -> bool
 {
     if(auto *cur = std::get_if<EAXFREQUENCYSHIFTERPROPERTIES>(&mEaxProps); cur && *cur == props)
@@ -222,7 +223,6 @@ auto EaxFrequencyShifterCommitter::commit(const EAXFREQUENCYSHIFTERPROPERTIES &p
     return true;
 }
 
-template<>
 void EaxFrequencyShifterCommitter::SetDefaults(EaxEffectProps &props)
 {
     props = EAXFREQUENCYSHIFTERPROPERTIES{
@@ -231,7 +231,6 @@ void EaxFrequencyShifterCommitter::SetDefaults(EaxEffectProps &props)
         .ulRightDirection = EAXFREQUENCYSHIFTER_DEFAULTRIGHTDIRECTION};
 }
 
-template<>
 void EaxFrequencyShifterCommitter::Get(const EaxCall &call, const EAXFREQUENCYSHIFTERPROPERTIES &props)
 {
     switch(call.get_property_id())
@@ -245,7 +244,6 @@ void EaxFrequencyShifterCommitter::Get(const EaxCall &call, const EAXFREQUENCYSH
     }
 }
 
-template<>
 void EaxFrequencyShifterCommitter::Set(const EaxCall &call, EAXFREQUENCYSHIFTERPROPERTIES &props)
 {
     switch(call.get_property_id())

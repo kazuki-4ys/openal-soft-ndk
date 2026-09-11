@@ -84,9 +84,6 @@ public:
 
     NOINLINE void process(const std::span<float> dst, std::span<const float> src) const
     {
-        /* NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast)
-         * Need to be able to cast floats to SIMD float types.
-         */
 #if HAVE_NEON
         if(const std::size_t todo{dst.size()>>2})
         {
@@ -134,9 +131,13 @@ public:
                 return vget_lane_f32(vadd_f32(vget_low_f32(r4), vget_high_f32(r4)), 0);
             });
         }
+        /* NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast) */
 
 #elif HAVE_SSE_INTRINSICS
 
+        /* NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast)
+         * Need to be able to cast floats to SIMD float types.
+         */
         if(const auto todo = dst.size()>>2_uz)
         {
             auto out = std::span{reinterpret_cast<__m128*>(dst.data()), todo};
@@ -203,7 +204,6 @@ public:
             return ret;
         });
 #endif
-        /* NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast) */
     }
 };
 

@@ -34,6 +34,7 @@
 #include "core/ambidefs.h"
 #include "core/bufferline.h"
 #include "core/context.h"
+#include "core/cubic_tables.h"
 #include "core/device.h"
 #include "core/effects/base.h"
 #include "core/effectslot.h"
@@ -46,21 +47,12 @@
 #include "opthelpers.h"
 #include "vector.h"
 
-#if HAVE_CXXMODULES
-import cubic_tables;
-#else
-#include "core/cubic_tables.hpp"
-#endif
-
 struct BufferStorage;
 
 namespace {
 
-constexpr auto MinDecayTime = 0.1f;
-constexpr auto MaxDecayTime = 20.0f;
 constexpr auto MaxModulationTime = 4.0f;
 constexpr auto DefaultModulationTime = 0.25f;
-constexpr auto MaxHFReference = 20'000.0f;
 
 #define MOD_FRACBITS 24
 #define MOD_FRACONE  (1<<MOD_FRACBITS)
@@ -254,10 +246,6 @@ constexpr std::array<float, NUM_LINES> LATE_LINE_LENGTHS{{
     9.709681e-3f, 1.223343e-2f, 1.689561e-2f, 1.941936e-2f
 }};
 
-constexpr auto LateAllpassAverage = std::reduce(LATE_ALLPASS_LENGTHS.begin(),
-    LATE_ALLPASS_LENGTHS.end(), 0.0f) / float{NUM_LINES};
-constexpr auto LateDelayAverage = std::reduce(LATE_LINE_LENGTHS.begin(),
-    LATE_LINE_LENGTHS.end(), 0.0f) / float{NUM_LINES} + LateAllpassAverage;
 
 using ReverbUpdateLine = std::array<float, MAX_UPDATE_SAMPLES>;
 using ReverbUpdateSpan = std::span<float, MAX_UPDATE_SAMPLES>;
@@ -399,10 +387,10 @@ struct T60Filter {
         float lf0norm, float hf0norm);
 
     /* Applies the two T60 damping filter sections. */
-    void process(std::span<float> const samples) noexcept NONBLOCKING
+    void process(std::span<float> const samples)
     { DualBiquad{mHFFilter, mLFFilter}.process(samples, samples); }
 
-    void clear() noexcept NONBLOCKING { mHFFilter.clear(); mLFFilter.clear(); }
+    void clear() noexcept { mHFFilter.clear(); mLFFilter.clear(); }
 };
 
 struct EarlyReflections {
@@ -420,19 +408,17 @@ struct EarlyReflections {
         std::array<float, MaxAmbiChannels> Current{};
         std::array<float, MaxAmbiChannels> Target{};
 
-        void clear() noexcept NONBLOCKING { Current.fill(0.0f); Target.fill(0.0); }
+        void clear() { Current.fill(0.0f); Target.fill(0.0); }
     };
     std::array<OutGains,NUM_LINES> Gains{};
 
     void updateLines(float density_mult, float diffusion, float decayTime, float frequency);
 
-    void clear() noexcept NONBLOCKING
+    void clear()
     {
         std::ranges::fill(Allpass.Delay.mLine, 0.0f);
         std::ranges::fill(Delay.mLine, 0.0f);
-        IGNORE_FUNCTION_EFFECTS( /* OutGains::clear is non-blocking. */
-            std::ranges::for_each(Gains, &OutGains::clear);
-        )
+        std::ranges::for_each(Gains, &OutGains::clear);
     }
 };
 
@@ -483,24 +469,20 @@ struct LateReverb {
         std::array<float, MaxAmbiChannels> Current{};
         std::array<float, MaxAmbiChannels> Target{};
 
-        void clear() noexcept NONBLOCKING { Current.fill(0.0f); Target.fill(0.0); }
+        void clear() { Current.fill(0.0f); Target.fill(0.0); }
     };
     std::array<OutGains,NUM_LINES> Gains{};
 
     void updateLines(float density_mult, float diffusion, float lfDecayTime, float mfDecayTime,
         float hfDecayTime, float lf0norm, float hf0norm, float frequency);
 
-    void clear() noexcept NONBLOCKING
+    void clear()
     {
         std::ranges::fill(VecAp.Delay.mLine, 0.0f);
         std::ranges::fill(Delay.mLine, 0.0f);
-        IGNORE_FUNCTION_EFFECTS(
-            std::ranges::for_each(T60, &T60Filter::clear);
-        )
+        std::ranges::for_each(T60, &T60Filter::clear);
         Mod.clear();
-        IGNORE_FUNCTION_EFFECTS(
-            std::ranges::for_each(Gains, &OutGains::clear);
-        )
+        std::ranges::for_each(Gains, &OutGains::clear);
     }
 };
 
@@ -509,7 +491,7 @@ struct ReverbPipeline {
     struct FilterPair {
         BiquadFilter Lp;
         BiquadFilter Hp;
-        void clear() noexcept NONBLOCKING { Lp.clear(); Hp.clear(); }
+        void clear() noexcept { Lp.clear(); Hp.clear(); }
         void process(std::span<float const> const src, std::span<float> const dst)
         { DualBiquad{Lp, Hp}.process(src, dst); }
     };
@@ -552,20 +534,16 @@ struct ReverbPipeline {
         std::span<ReverbUpdateLine, NUM_LINES> tempSamples,
         std::span<FloatBufferLine, NUM_LINES> outSamples);
 
-    void clear() noexcept NONBLOCKING
+    void clear() noexcept
     {
         std::ranges::fill(mLateDelayIn.mLine, 0.0f);
-        IGNORE_FUNCTION_EFFECTS( /* FilterPair::clear is non-blocking. */
-            std::ranges::for_each(mFilter, &FilterPair::clear);
-        )
+        std::ranges::for_each(mFilter, &FilterPair::clear);
         mEarlyDelayTap = {};
         mEarlyDelayCoeff = {};
         mLateDelayTap = {};
         mEarly.clear();
         mLate.clear();
-        IGNORE_FUNCTION_EFFECTS( /* BandSplitter::clear is non-blocking. */
-            std::ranges::for_each(mAmbiSplitter | std::views::join, &BandSplitter::clear);
-        )
+        std::ranges::for_each(mAmbiSplitter | std::views::join, &BandSplitter::clear);
     }
 };
 
@@ -621,24 +599,6 @@ struct ReverbState final : EffectState {
     bool mUpmixOutput{false};
 
 
-    static constexpr auto DoMixRow(std::span<float> const OutBuffer,
-        const std::span<float const, 4> Gains,
-        const std::span<FloatBufferLine const, 4> InSamples) noexcept NONBLOCKING
-    {
-        std::ranges::fill(OutBuffer, 0.0f);
-        std::ignore = std::ranges::mismatch(Gains, InSamples,
-            [OutBuffer](float const gain, FloatConstBufferSpan const inBuffer)
-        {
-            if(std::fabs(gain) > GainSilenceThreshold)
-            {
-                std::ranges::transform(OutBuffer, inBuffer, OutBuffer.begin(),
-                    [gain](float const sample, float const in) noexcept
-                { return sample + in*gain; });
-            }
-            return true;
-        });
-    }
-
     void MixOutPlain(ReverbPipeline &pipeline, std::span<FloatBufferLine> const samplesOut,
         std::size_t const todo) const
     {
@@ -663,6 +623,24 @@ struct ReverbState final : EffectState {
     void MixOutAmbiUp(ReverbPipeline &pipeline, std::span<FloatBufferLine> const samplesOut,
         std::size_t const todo)
     {
+        static constexpr auto DoMixRow = [](std::span<float> const OutBuffer,
+            const std::span<float const, 4> Gains,
+            const std::span<FloatBufferLine const, 4> InSamples)
+        {
+            std::ranges::fill(OutBuffer, 0.0f);
+            std::ignore = std::ranges::mismatch(Gains, InSamples,
+                [OutBuffer](float const gain, FloatConstBufferSpan const inBuffer)
+            {
+                if(std::fabs(gain) > GainSilenceThreshold)
+                {
+                    std::ranges::transform(OutBuffer, inBuffer, OutBuffer.begin(),
+                        [gain](float const sample, float const in) noexcept
+                    { return sample + in*gain; });
+                }
+                return true;
+            });
+        };
+
         /* When upsampling, the B-Format conversion needs to be done separately
          * so the proper HF scaling can be applied to each B-Format channel.
          * The panning gains then pan and upsample the B-Format channels.
@@ -715,9 +693,9 @@ struct ReverbState final : EffectState {
 
     void deviceUpdate(DeviceBase const *device, BufferStorage const *buffer) override;
     void update(ContextBase const *context, EffectSlotBase const *slot, EffectProps const *props,
-        EffectTarget target) noexcept NONBLOCKING override;
+        EffectTarget target) override;
     void process(std::size_t samplesToDo, std::span<FloatBufferLine const> samplesIn,
-        std::span<FloatBufferLine> samplesOut) noexcept override;
+        std::span<FloatBufferLine> samplesOut) override;
 };
 
 /**************************************
@@ -871,7 +849,7 @@ auto CalcDecayCoeff(float const length, float const decayTime) -> float
  */
 auto CalcDecayLength(float const coeff, float const decayTime) -> float
 {
-    constexpr auto log10_decaygain = -3.0f/*std::log10(ReverbDecayGain)*/;
+    static constexpr auto log10_decaygain = -3.0f/*std::log10(ReverbDecayGain)*/;
     return std::log10(coeff) * decayTime / log10_decaygain;
 }
 
@@ -900,7 +878,7 @@ auto CalcDensityGain(float const a) -> float
 void CalcMatrixCoeffs(float const diffusion, float *const x, float *const y)
 {
     /* The matrix is of order 4, so n is sqrt(4 - 1). */
-    constexpr auto n = std::numbers::sqrt3_v<float>;
+    static constexpr auto n = std::numbers::sqrt3_v<float>;
     const auto t = diffusion * std::atan(n);
 
     /* Calculate the first mixing matrix coefficient. */
@@ -1014,7 +992,11 @@ void LateReverb::updateLines(float const density_mult, float const diffusion,
     /* Scaling factor to convert the normalized reference frequencies from
      * representing 0...freq to 0...max_reference.
      */
+    static constexpr auto MaxHFReference = 20000.0f;
     const auto norm_weight_factor = frequency / MaxHFReference;
+
+    static constexpr auto allpass_avg = std::reduce(LATE_ALLPASS_LENGTHS.begin(),
+        LATE_ALLPASS_LENGTHS.end(), 0.0f) / float{NUM_LINES};
 
     /* To compensate for changes in modal density and decay time of the late
      * reverb signal, the input is attenuated based on the maximal energy of
@@ -1024,6 +1006,8 @@ void LateReverb::updateLines(float const density_mult, float const diffusion,
      * The average length of the delay lines is used to calculate the
      * attenuation coefficient.
      */
+    static constexpr auto delay_avg = std::reduce(LATE_LINE_LENGTHS.begin(),
+        LATE_LINE_LENGTHS.end(), 0.0f) / float{NUM_LINES} + allpass_avg;
 
     /* The density gain calculation uses an average decay time weighted by
      * approximate bandwidth. This attempts to compensate for losses of energy
@@ -1033,8 +1017,7 @@ void LateReverb::updateLines(float const density_mult, float const diffusion,
         lf0norm*norm_weight_factor*lfDecayTime +
         (hf0norm - lf0norm)*norm_weight_factor*mfDecayTime +
         (1.0f - hf0norm*norm_weight_factor)*hfDecayTime;
-    DensityGain = CalcDensityGain(CalcDecayCoeff(LateDelayAverage*density_mult,
-        decayTimeWeighted));
+    DensityGain = CalcDensityGain(CalcDecayCoeff(delay_avg*density_mult, decayTimeWeighted));
 
     /* Calculate the all-pass feed-back/forward coefficient. */
     VecAp.Coeff = diffusion*diffusion * InvSqrt2;
@@ -1063,7 +1046,7 @@ void LateReverb::updateLines(float const density_mult, float const diffusion,
     std::ranges::transform(LATE_ALLPASS_LENGTHS, lengths, lengths.begin(),
         [density_mult,diffusion,moddepth=Mod.Depth/frequency](float const length,
         float const curlength) -> float
-    { return lerpf(length, LateAllpassAverage, diffusion)*density_mult + moddepth + curlength; });
+    { return lerpf(length, allpass_avg, diffusion)*density_mult + moddepth + curlength; });
 
     /* Calculate the T60 damping coefficients for each line. */
     std::ignore = std::ranges::mismatch(T60, lengths,
@@ -1225,9 +1208,9 @@ void ReverbPipeline::update3DPanning(std::span<float const, 3> const Reflections
 }
 
 void ReverbState::update(ContextBase const *const context, EffectSlotBase const *const slot,
-    EffectProps const *const props, EffectTarget const target) noexcept NONBLOCKING
+    EffectProps const *const props, EffectTarget const target)
 {
-    auto &reverbprops = IGNORE_FUNCTION_EFFECTS(std::get<ReverbProps>(*props));
+    auto &reverbprops = std::get<ReverbProps>(*props);
     const auto device = al::get_not_null(context->mDevice);
     const auto frequency = static_cast<float>(device->mSampleRate);
 
@@ -1240,6 +1223,8 @@ void ReverbState::update(ContextBase const *const context, EffectSlotBase const 
             reverbprops.DecayTime);
 
     /* Calculate the LF/HF decay times. */
+    static constexpr auto MinDecayTime = 0.1f;
+    static constexpr auto MaxDecayTime = 20.0f;
     const auto lfDecayTime = std::clamp(reverbprops.DecayTime*reverbprops.DecayLFRatio,
         MinDecayTime, MaxDecayTime);
     const auto hfDecayTime = std::clamp(reverbprops.DecayTime*hfRatio, MinDecayTime, MaxDecayTime);
@@ -1817,7 +1802,6 @@ void ReverbPipeline::processLate(std::size_t offset, std::size_t const samplesTo
 
 void ReverbState::process(std::size_t const samplesToDo,
     std::span<FloatBufferLine const> const samplesIn, std::span<FloatBufferLine> const samplesOut)
-    noexcept NONBLOCKING
 {
     const auto offset = mOffset;
 

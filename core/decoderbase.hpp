@@ -4,8 +4,6 @@
 #include <cstddef>
 #include <span>
 
-#include "opthelpers.h"
-
 
 struct DecoderBase {
     static constexpr auto sMaxPadding = std::size_t{256};
@@ -22,8 +20,7 @@ struct DecoderBase {
     void operator=(const DecoderBase&) = delete;
     void operator=(DecoderBase&&) = delete;
 
-    virtual void decode(std::span<std::span<float>> samples, bool updateState) noexcept NONBLOCKING
-        = 0;
+    virtual void decode(std::span<std::span<float>> samples, bool updateState) = 0;
 
     /**
      * The width factor for Super Stereo processing. Can be changed in between

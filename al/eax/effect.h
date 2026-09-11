@@ -9,7 +9,6 @@
 #include "AL/alext.h"
 #include "core/effects/base.h"
 #include "call.h"
-#include "opthelpers.h"
 
 inline bool EaxTraceCommits{false};
 
@@ -55,14 +54,16 @@ constexpr ALenum EnumFromEaxEffectType(const EaxEffectProps &props)
 }
 
 struct EaxReverbCommitter {
-    EaxReverbCommitter(EaxEffectProps &eaxprops LIFETIMEBOUND, EffectProps &alprops LIFETIMEBOUND)
+    struct Exception;
+
+    EaxReverbCommitter(EaxEffectProps &eaxprops, EffectProps &alprops)
         : mEaxProps{eaxprops}, mAlProps{alprops}
     { }
 
     EaxEffectProps &mEaxProps;
     EffectProps &mAlProps;
 
-    [[noreturn]] static void fail(std::string_view message);
+    [[noreturn]] static void fail(const std::string_view message);
     [[noreturn]] static void fail_unknown_property_id()
     { fail(EaxEffectErrorMessages::unknown_property_id()); }
 
@@ -115,42 +116,44 @@ struct EaxReverbCommitter {
     static void translate(const EAX20LISTENERPROPERTIES& src, EAXREVERBPROPERTIES& dst) noexcept;
 };
 
-template<typename P>
+template<typename T>
 struct EaxCommitter {
+    struct Exception;
+
     EaxEffectProps &mEaxProps;
     EffectProps &mAlProps;
 
     template<typename TValidator, typename TProperty>
-    static auto defer(const EaxCall &call, TProperty &property) -> void
+    static void defer(const EaxCall &call, TProperty &property)
     {
         const auto &value = call.load<const TProperty>();
         TValidator{}(value);
         property = value;
     }
 
-    [[noreturn]] static auto fail(std::string_view message) -> void;
-    [[noreturn]] static auto fail_unknown_property_id() -> void
+    [[noreturn]] static void fail(const std::string_view message);
+    [[noreturn]] static void fail_unknown_property_id()
     { fail(EaxEffectErrorMessages::unknown_property_id()); }
 
-    EaxCommitter(EaxEffectProps &eaxprops LIFETIMEBOUND, EffectProps &alprops LIFETIMEBOUND)
+private:
+    EaxCommitter(EaxEffectProps &eaxprops, EffectProps &alprops)
         : mEaxProps{eaxprops}, mAlProps{alprops}
     { }
 
-    [[nodiscard]] auto commit(const P &props) const -> bool;
-
-    static auto SetDefaults(EaxEffectProps &props) -> void;
-    static auto Get(const EaxCall &call, const P &props) -> void;
-    static auto Set(const EaxCall &call, P &props) -> void;
+    friend T;
 };
 
-#define DECL_COMMITTER(T, P) \
-template<> [[noreturn]] auto EaxCommitter<P>::fail(std::string_view message) -> void; \
-template<> [[nodiscard]] auto EaxCommitter<P>::commit(P const &props) const -> bool; \
-template<> auto EaxCommitter<P>::SetDefaults(EaxEffectProps &props) -> void; \
-template<> auto EaxCommitter<P>::Get(const EaxCall &call, P const &props) -> void; \
-template<> auto EaxCommitter<P>::Set(const EaxCall &call, P &props) -> void; \
-using T = EaxCommitter<P>;
-
+#define DECL_COMMITTER(T, P) struct T : EaxCommitter<T> {                     \
+    T(EaxEffectProps &eaxprops, EffectProps &alprops)                         \
+        : EaxCommitter{eaxprops, alprops}                                     \
+    { }                                                                       \
+                                                                              \
+    [[nodiscard]] auto commit(const P &props) const -> bool;                  \
+                                                                              \
+    static void SetDefaults(EaxEffectProps &props);                           \
+    static void Get(const EaxCall &call, const P &props);                     \
+    static void Set(const EaxCall &call, P &props);                           \
+};
 DECL_COMMITTER(EaxAutowahCommitter, EAXAUTOWAHPROPERTIES)
 DECL_COMMITTER(EaxChorusCommitter, EAXCHORUSPROPERTIES)
 DECL_COMMITTER(EaxCompressorCommitter, EAXAGCCOMPRESSORPROPERTIES)
@@ -165,7 +168,9 @@ DECL_COMMITTER(EaxVocalMorpherCommitter, EAXVOCALMORPHERPROPERTIES)
 DECL_COMMITTER(EaxNullCommitter, std::monostate)
 #undef DECL_COMMITTER
 
-template<typename> struct CommitterFromProps { };
+template<typename T>
+struct CommitterFromProps { };
+
 template<> struct CommitterFromProps<std::monostate> { using type = EaxNullCommitter; };
 template<> struct CommitterFromProps<EAXREVERBPROPERTIES> { using type = EaxReverbCommitter; };
 template<> struct CommitterFromProps<EAXCHORUSPROPERTIES> { using type = EaxChorusCommitter; };

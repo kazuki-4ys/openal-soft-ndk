@@ -58,7 +58,8 @@ auto make_error(size_t linenum, al::format_string<Args...> fmt, Args&& ...args)
 } // namespace
 
 
-auto AmbDecConf::load(std::string_view const fname) noexcept -> al::expected<void, std::string>
+auto AmbDecConf::load(const std::string_view fname) noexcept
+    -> al::expected<std::monostate,std::string>
 {
     auto f = fs::ifstream{fs::path(al::char_as_u8(fname))};
     if(!f.is_open())
@@ -277,7 +278,7 @@ auto AmbDecConf::load(std::string_view const fname) noexcept -> al::expected<voi
             if(CoeffScale == AmbDecScale::Unset)
                 return make_error(linenum, "No coefficient scaling defined");
 
-            return {};
+            return std::monostate{};
         }
         else
             return make_error(linenum, "Unexpected command: {}", command);

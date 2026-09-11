@@ -73,17 +73,12 @@ void CompressorEffectHandler::GetParamfv(al::Context *context, const CompressorP
 #if ALSOFT_EAX
 namespace {
 
-/* NOLINTNEXTLINE(clazy-copyable-polymorphic) Exceptions must be copyable. */
-struct EaxCompressorException final : EaxException {
-    explicit EaxCompressorException(std::string_view const message)
-        : EaxException{"EAX_COMPRESSOR_EFFECT", message}
-    { }
-};
+using CompressorCommitter = EaxCommitter<EaxCompressorCommitter>;
 
 struct OnOffValidator {
     void operator()(eax_ulong const ulOnOff) const
     {
-        eax_validate_range<EaxCompressorException>(
+        eax_validate_range<CompressorCommitter::Exception>(
             "On-Off",
             ulOnOff,
             EAXAGCCOMPRESSOR_MINONOFF,
@@ -100,11 +95,16 @@ struct AllValidator {
 
 } // namespace
 
-template<> [[noreturn]]
-void EaxCompressorCommitter::fail(std::string_view const message)
-{ throw EaxCompressorException{message}; }
+template<> /* NOLINTNEXTLINE(clazy-copyable-polymorphic) Exceptions must be copyable. */
+struct CompressorCommitter::Exception final : EaxException {
+    explicit Exception(const std::string_view message) : EaxException{"EAX_CHORUS_EFFECT", message}
+    { }
+};
 
-template<>
+template<> [[noreturn]]
+void CompressorCommitter::fail(const std::string_view message)
+{ throw Exception{message}; }
+
 auto EaxCompressorCommitter::commit(const EAXAGCCOMPRESSORPROPERTIES &props) const -> bool
 {
     if(auto *cur = std::get_if<EAXAGCCOMPRESSORPROPERTIES>(&mEaxProps); cur && *cur == props)
@@ -116,13 +116,11 @@ auto EaxCompressorCommitter::commit(const EAXAGCCOMPRESSORPROPERTIES &props) con
     return true;
 }
 
-template<>
 void EaxCompressorCommitter::SetDefaults(EaxEffectProps &props)
 {
     props = EAXAGCCOMPRESSORPROPERTIES{.ulOnOff = EAXAGCCOMPRESSOR_DEFAULTONOFF};
 }
 
-template<>
 void EaxCompressorCommitter::Get(const EaxCall &call, const EAXAGCCOMPRESSORPROPERTIES &props)
 {
     switch(call.get_property_id())
@@ -134,7 +132,6 @@ void EaxCompressorCommitter::Get(const EaxCall &call, const EAXAGCCOMPRESSORPROP
     }
 }
 
-template<>
 void EaxCompressorCommitter::Set(const EaxCall &call, EAXAGCCOMPRESSORPROPERTIES &props)
 {
     switch(call.get_property_id())

@@ -32,7 +32,7 @@
 
 #include "alnumeric.h"
 #include "core/cubic_defs.h"
-#include "core/resampler_limits.hpp"
+#include "core/resampler_limits.h"
 #include "defs.h"
 #include "opthelpers.h"
 

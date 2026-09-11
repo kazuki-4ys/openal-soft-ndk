@@ -140,7 +140,7 @@ std::vector<DeviceEntry> CaptureList;
 OSStatus GetHwProperty(AudioHardwarePropertyID propId, UInt32 dataSize, void *propData)
 {
     const AudioObjectPropertyAddress addr{propId, kAudioObjectPropertyScopeGlobal,
-        kAudioObjectPropertyElementMain};
+        kAudioObjectPropertyElementMaster};
     return AudioObjectGetPropertyData(kAudioObjectSystemObject, &addr, 0, nullptr, &dataSize,
         propData);
 }
@@ -148,7 +148,7 @@ OSStatus GetHwProperty(AudioHardwarePropertyID propId, UInt32 dataSize, void *pr
 OSStatus GetHwPropertySize(AudioHardwarePropertyID propId, UInt32 *outSize)
 {
     const AudioObjectPropertyAddress addr{propId, kAudioObjectPropertyScopeGlobal,
-        kAudioObjectPropertyElementMain};
+        kAudioObjectPropertyElementMaster};
     return AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &addr, 0, nullptr, outSize);
 }
 
@@ -299,6 +299,8 @@ void EnumerateDevices(std::vector<DeviceEntry> &list, bool isCapture)
         for(auto curitem = newdevs.begin()+1;curitem != newdevs.end();++curitem)
         {
             const auto subrange = std::span{newdevs.begin(), curitem};
+            auto check_match = [curitem](const DeviceEntry &entry) -> bool
+            { return entry.mName == curitem->mName; };
             if(std::ranges::find(subrange, curitem->mName, &DeviceEntry::mName) != subrange.end())
             {
                 auto name = std::string{};
@@ -319,7 +321,7 @@ struct DeviceHelper {
     DeviceHelper()
     {
         AudioObjectPropertyAddress addr{kAudioHardwarePropertyDefaultOutputDevice,
-            kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
+            kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMaster};
         OSStatus status = AudioObjectAddPropertyListener(kAudioObjectSystemObject, &addr, DeviceListenerProc, nil);
         if (status != noErr)
             ERR("AudioObjectAddPropertyListener fail: {}", status);
@@ -327,7 +329,7 @@ struct DeviceHelper {
     ~DeviceHelper()
     {
         AudioObjectPropertyAddress addr{kAudioHardwarePropertyDefaultOutputDevice,
-            kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
+            kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMaster};
         OSStatus status = AudioObjectRemovePropertyListener(kAudioObjectSystemObject, &addr, DeviceListenerProc, nil);
         if (status != noErr)
             ERR("AudioObjectRemovePropertyListener fail: {}", status);
@@ -391,7 +393,7 @@ CoreAudioPlayback::~CoreAudioPlayback()
 
 
 OSStatus CoreAudioPlayback::MixerProc(AudioUnitRenderActionFlags*, const AudioTimeStamp*, UInt32,
-    UInt32, AudioBufferList *ioData) noexcept NONBLOCKING
+    UInt32, AudioBufferList *ioData) noexcept
 {
     for(auto i=0_uz;i < ioData->mNumberBuffers;++i)
     {
@@ -493,7 +495,7 @@ void CoreAudioPlayback::open(std::string_view name)
     {
         UInt32 type{};
         err = GetDevProperty(audioDevice, kAudioDevicePropertyDataSource, false,
-            kAudioObjectPropertyElementMain, sizeof(type), &type);
+            kAudioObjectPropertyElementMaster, sizeof(type), &type);
         if(err != noErr)
             WARN("Failed to get audio device type: '{}' ({})", FourCCPrinter{err}.c_str(), err);
         else
@@ -594,35 +596,35 @@ bool CoreAudioPlayback::reset()
     streamFormat.mChannelsPerFrame = mDevice->channelsFromFmt();
 
     streamFormat.mFramesPerPacket = 1;
-    streamFormat.mFormatFlags = kAudioFormatFlagsNativeEndian | kAudioFormatFlagIsPacked;
+    streamFormat.mFormatFlags = kAudioFormatFlagsNativeEndian | kLinearPCMFormatFlagIsPacked;
     streamFormat.mFormatID = kAudioFormatLinearPCM;
     switch(mDevice->FmtType)
     {
-    case DevFmtUByte:
-        mDevice->FmtType = DevFmtByte;
-        [[fallthrough]];
-    case DevFmtByte:
-        streamFormat.mFormatFlags |= kAudioFormatFlagIsSignedInteger;
-        streamFormat.mBitsPerChannel = 8;
-        break;
-    case DevFmtUShort:
-        mDevice->FmtType = DevFmtShort;
-        [[fallthrough]];
-    case DevFmtShort:
-        streamFormat.mFormatFlags |= kAudioFormatFlagIsSignedInteger;
-        streamFormat.mBitsPerChannel = 16;
-        break;
-    case DevFmtUInt:
-        mDevice->FmtType = DevFmtInt;
-        [[fallthrough]];
-    case DevFmtInt:
-        streamFormat.mFormatFlags |= kAudioFormatFlagIsSignedInteger;
-        streamFormat.mBitsPerChannel = 32;
-        break;
-    case DevFmtFloat:
-        streamFormat.mFormatFlags |= kAudioFormatFlagIsFloat;
-        streamFormat.mBitsPerChannel = 32;
-        break;
+        case DevFmtUByte:
+            mDevice->FmtType = DevFmtByte;
+            [[fallthrough]];
+        case DevFmtByte:
+            streamFormat.mFormatFlags |= kLinearPCMFormatFlagIsSignedInteger;
+            streamFormat.mBitsPerChannel = 8;
+            break;
+        case DevFmtUShort:
+            mDevice->FmtType = DevFmtShort;
+            [[fallthrough]];
+        case DevFmtShort:
+            streamFormat.mFormatFlags |= kLinearPCMFormatFlagIsSignedInteger;
+            streamFormat.mBitsPerChannel = 16;
+            break;
+        case DevFmtUInt:
+            mDevice->FmtType = DevFmtInt;
+            [[fallthrough]];
+        case DevFmtInt:
+            streamFormat.mFormatFlags |= kLinearPCMFormatFlagIsSignedInteger;
+            streamFormat.mBitsPerChannel = 32;
+            break;
+        case DevFmtFloat:
+            streamFormat.mFormatFlags |= kLinearPCMFormatFlagIsFloat;
+            streamFormat.mBitsPerChannel = 32;
+            break;
     }
     streamFormat.mBytesPerFrame = streamFormat.mChannelsPerFrame*streamFormat.mBitsPerChannel/8;
     streamFormat.mBytesPerPacket = streamFormat.mBytesPerFrame*streamFormat.mFramesPerPacket;
@@ -640,14 +642,9 @@ bool CoreAudioPlayback::reset()
 
     /* setup callback */
     mFrameSize = mDevice->frameSizeFromFmt();
-    auto input = AURenderCallbackStruct{};
-    input.inputProc = [](void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags,
-        const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames,
-        AudioBufferList *ioData) noexcept NONBLOCKING
-    {
-        return static_cast<CoreAudioPlayback*>(inRefCon)->MixerProc(ioActionFlags, inTimeStamp,
-            inBusNumber, inNumberFrames, ioData);
-    };
+    AURenderCallbackStruct input{};
+    input.inputProc = [](void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags, const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList *ioData) noexcept
+    { return static_cast<CoreAudioPlayback*>(inRefCon)->MixerProc(ioActionFlags, inTimeStamp, inBusNumber, inNumberFrames, ioData); };
     input.inputProcRefCon = this;
 
     err = AudioUnitSetProperty(mAudioUnit, kAudioUnitProperty_SetRenderCallback,
@@ -859,31 +856,39 @@ void CoreAudioCapture::open(std::string_view name)
             "Could not get input format: '{}' ({})", FourCCPrinter{err}.c_str(), err};
 
     // Set up the requested format description
-    auto requestedFormat = AudioStreamBasicDescription{};
-    requestedFormat.mFormatFlags = kAudioFormatFlagsNativeEndian | kAudioFormatFlagIsPacked;
+    AudioStreamBasicDescription requestedFormat{};
     switch(mDevice->FmtType)
     {
     case DevFmtByte:
-        requestedFormat.mFormatFlags |= kAudioFormatFlagIsSignedInteger;
-        [[fallthrough]];
+        requestedFormat.mBitsPerChannel = 8;
+        requestedFormat.mFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked;
+        break;
     case DevFmtUByte:
         requestedFormat.mBitsPerChannel = 8;
+        requestedFormat.mFormatFlags = kAudioFormatFlagIsPacked;
         break;
     case DevFmtShort:
-        requestedFormat.mFormatFlags |= kAudioFormatFlagIsSignedInteger;
-        [[fallthrough]];
+        requestedFormat.mBitsPerChannel = 16;
+        requestedFormat.mFormatFlags = kAudioFormatFlagIsSignedInteger
+            | kAudioFormatFlagsNativeEndian | kAudioFormatFlagIsPacked;
+        break;
     case DevFmtUShort:
         requestedFormat.mBitsPerChannel = 16;
+        requestedFormat.mFormatFlags = kAudioFormatFlagsNativeEndian | kAudioFormatFlagIsPacked;
         break;
     case DevFmtInt:
-        requestedFormat.mFormatFlags |= kAudioFormatFlagIsSignedInteger;
-        [[fallthrough]];
+        requestedFormat.mBitsPerChannel = 32;
+        requestedFormat.mFormatFlags = kAudioFormatFlagIsSignedInteger
+            | kAudioFormatFlagsNativeEndian | kAudioFormatFlagIsPacked;
+        break;
     case DevFmtUInt:
         requestedFormat.mBitsPerChannel = 32;
+        requestedFormat.mFormatFlags = kAudioFormatFlagsNativeEndian | kAudioFormatFlagIsPacked;
         break;
     case DevFmtFloat:
-        requestedFormat.mFormatFlags |= kAudioFormatFlagIsFloat;
         requestedFormat.mBitsPerChannel = 32;
+        requestedFormat.mFormatFlags = kLinearPCMFormatFlagIsFloat | kAudioFormatFlagsNativeEndian
+            | kAudioFormatFlagIsPacked;
         break;
     }
 

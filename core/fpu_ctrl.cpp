@@ -45,7 +45,7 @@ auto disable_denormals() -> unsigned int
     auto sseState = state;
     sseState &= ~_MM_FLUSH_ZERO_MASK;
     sseState |= _MM_FLUSH_ZERO_ON;
-    if(CPUCapFlags.test(CPUCap::SSE2))
+    if((CPUCapFlags&CPU_CAP_SSE2))
     {
         sseState &= ~_MM_DENORMALS_ZERO_MASK;
         sseState |= _MM_DENORMALS_ZERO_ON;
@@ -73,7 +73,7 @@ void reset_fpu(unsigned int state [[maybe_unused]])
 } // namespace
 
 
-auto FPUCtl::Set() noexcept NONBLOCKING -> unsigned int
+auto FPUCtl::Set() noexcept -> unsigned int
 {
 #if HAVE_SSE_INTRINSICS
     return disable_denormals();
@@ -81,19 +81,19 @@ auto FPUCtl::Set() noexcept NONBLOCKING -> unsigned int
 #else
 
 #if HAVE_SSE
-    if(CPUCapFlags.test(CPUCap::SSE))
+    if((CPUCapFlags&CPU_CAP_SSE))
         return disable_denormals();
 #endif
     return 0u;
 #endif
 }
 
-void FPUCtl::Reset(unsigned int state [[maybe_unused]]) noexcept NONBLOCKING
+void FPUCtl::Reset(unsigned int state [[maybe_unused]]) noexcept
 {
 #if HAVE_SSE_INTRINSICS
     reset_fpu(state);
 #elif HAVE_SSE
-    if(CPUCapFlags.test(CPUCap::SSE))
+    if((CPUCapFlags&CPU_CAP_SSE))
         reset_fpu(state);
 #endif
 }

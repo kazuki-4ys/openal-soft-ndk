@@ -143,17 +143,12 @@ void ModulatorEffectHandler::GetParamfv(al::Context *context, const ModulatorPro
 #if ALSOFT_EAX
 namespace {
 
-/* NOLINTNEXTLINE(clazy-copyable-polymorphic) Exceptions must be copyable. */
-struct EaxModulatorException final : EaxException {
-    explicit EaxModulatorException(std::string_view const message)
-        : EaxException{"EAX_RING_MODULATOR_EFFECT", message}
-    { }
-};
+using ModulatorCommitter = EaxCommitter<EaxModulatorCommitter>;
 
 struct FrequencyValidator {
     void operator()(float const flFrequency) const
     {
-        eax_validate_range<EaxModulatorException>(
+        eax_validate_range<ModulatorCommitter::Exception>(
             "Frequency",
             flFrequency,
             EAXRINGMODULATOR_MINFREQUENCY,
@@ -164,7 +159,7 @@ struct FrequencyValidator {
 struct HighPassCutOffValidator {
     void operator()(float const flHighPassCutOff) const
     {
-        eax_validate_range<EaxModulatorException>(
+        eax_validate_range<ModulatorCommitter::Exception>(
             "High-Pass Cutoff",
             flHighPassCutOff,
             EAXRINGMODULATOR_MINHIGHPASSCUTOFF,
@@ -175,7 +170,7 @@ struct HighPassCutOffValidator {
 struct WaveformValidator {
     void operator()(eax_ulong const ulWaveform) const
     {
-        eax_validate_range<EaxModulatorException>(
+        eax_validate_range<ModulatorCommitter::Exception>(
             "Waveform",
             ulWaveform,
             EAXRINGMODULATOR_MINWAVEFORM,
@@ -194,11 +189,17 @@ struct AllValidator {
 
 } // namespace
 
-template<> [[noreturn]]
-void EaxModulatorCommitter::fail(std::string_view const message)
-{ throw EaxModulatorException{message}; }
+template<> /* NOLINTNEXTLINE(clazy-copyable-polymorphic) Exceptions must be copyable. */
+struct ModulatorCommitter::Exception final : EaxException {
+    explicit Exception(const std::string_view message)
+        : EaxException{"EAX_RING_MODULATOR_EFFECT", message}
+    { }
+};
 
-template<>
+template<> [[noreturn]]
+void ModulatorCommitter::fail(const std::string_view message)
+{ throw Exception{message}; }
+
 auto EaxModulatorCommitter::commit(const EAXRINGMODULATORPROPERTIES &props) const -> bool
 {
     if(auto *cur = std::get_if<EAXRINGMODULATORPROPERTIES>(&mEaxProps); cur && *cur == props)
@@ -225,7 +226,6 @@ auto EaxModulatorCommitter::commit(const EAXRINGMODULATORPROPERTIES &props) cons
     return true;
 }
 
-template<>
 void EaxModulatorCommitter::SetDefaults(EaxEffectProps &props)
 {
     props = EAXRINGMODULATORPROPERTIES{
@@ -234,7 +234,6 @@ void EaxModulatorCommitter::SetDefaults(EaxEffectProps &props)
         .ulWaveform = EAXRINGMODULATOR_DEFAULTWAVEFORM};
 }
 
-template<>
 void EaxModulatorCommitter::Get(const EaxCall &call, const EAXRINGMODULATORPROPERTIES &props)
 {
     switch(call.get_property_id())
@@ -248,7 +247,6 @@ void EaxModulatorCommitter::Get(const EaxCall &call, const EAXRINGMODULATORPROPE
     }
 }
 
-template<>
 void EaxModulatorCommitter::Set(const EaxCall &call, EAXRINGMODULATORPROPERTIES &props)
 {
     switch(call.get_property_id())

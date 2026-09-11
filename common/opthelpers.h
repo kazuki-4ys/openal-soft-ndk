@@ -12,8 +12,10 @@
 #define HAS_BUILTIN(x) (0)
 #endif
 
-#ifndef __has_cpp_attribute
-#define __has_cpp_attribute(x) (0)
+#ifdef __has_cpp_attribute
+#define HAS_ATTRIBUTE __has_cpp_attribute
+#else
+#define HAS_ATTRIBUTE(x) (0)
 #endif
 
 #ifdef __GNUC__
@@ -36,7 +38,7 @@
 #define ASSUME __builtin_assume
 #elif defined(_MSC_VER)
 #define ASSUME __assume
-#elif __has_cpp_attribute(assume)
+#elif __has_attribute(assume)
 #define ASSUME(x) [[assume(x)]]
 #elif HAS_BUILTIN(__builtin_unreachable)
 #define ASSUME(x) do { if(x) break; __builtin_unreachable(); } while(false)
@@ -44,37 +46,26 @@
 #define ASSUME(x) (static_cast<void>(0))
 #endif
 
-#if !defined(_WIN32) && __has_cpp_attribute(gnu::visibility)
+#if !defined(_WIN32) && HAS_ATTRIBUTE(gnu::visibility)
 #define DECL_HIDDEN [[gnu::visibility("hidden")]]
 #else
 #define DECL_HIDDEN
 #endif
 
-#if __has_cpp_attribute(clang::lifetimebound)
+#if HAS_ATTRIBUTE(clang::lifetimebound)
 #define LIFETIMEBOUND [[clang::lifetimebound]]
-#elif __has_cpp_attribute(msvc::lifetimebound)
+#elif HAS_ATTRIBUTE(msvc::lifetimebound)
 #define LIFETIMEBOUND [[msvc::lifetimebound]]
-#elif __has_cpp_attribute(lifetimebound)
+#elif HAS_ATTRIBUTE(lifetimebound)
 #define LIFETIMEBOUND [[lifetimebound]]
 #else
 #define LIFETIMEBOUND
 #endif
 
-#if __has_cpp_attribute(clang::nonblocking) && !defined(_MSVC_STL_UPDATE)
+#if HAS_ATTRIBUTE(clang::nonblocking)
 #define NONBLOCKING [[clang::nonblocking]]
-#define BLOCKING [[clang::blocking]]
 #else
 #define NONBLOCKING
-#define BLOCKING
-#endif
-
-#if defined(__clang__) && (__clang_major__ >= (defined(__APPLE__) ? 17 : 20))
-#define IGNORE_FUNCTION_EFFECTS(...) _Pragma("clang diagnostic push") \
-    _Pragma("clang diagnostic ignored \"-Wfunction-effects\"") \
-    __VA_ARGS__ \
-    _Pragma("clang diagnostic pop")
-#else
-#define IGNORE_FUNCTION_EFFECTS(...) __VA_ARGS__
 #endif
 
 namespace al {
@@ -82,12 +73,6 @@ namespace al {
 template<typename T>
 constexpr std::underlying_type_t<T> to_underlying(T e) noexcept
 { return static_cast<std::underlying_type_t<T>>(e); }
-
-struct dereference {
-    template<typename T> [[nodiscard]] constexpr
-    auto operator()(T&& p) const noexcept(noexcept(*std::forward<T>(p))) -> decltype(auto)
-    { return *std::forward<T>(p); }
-};
 
 /**
  * Gets a not_null<T*> from a not_null<SmartPtr<T>>, hopefully avoiding ths

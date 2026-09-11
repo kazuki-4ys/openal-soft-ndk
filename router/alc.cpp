@@ -17,7 +17,6 @@
 
 #include "altypes.hpp"
 #include "alstring.h"
-#include "opthelpers.h"
 #include "strutils.hpp"
 
 #if HAVE_CXXMODULES
@@ -575,7 +574,7 @@ ALC_API auto ALC_APIENTRY alcOpenDevice(ALCchar const *const devicename) noexcep
                 return true;
             }
             return false;
-        }, al::dereference{});
+        }, &DriverIfacePtr::operator*);
         if(iter == DriverList.end())
         {
             LastError.store(ALC_INVALID_DEVICE);
@@ -751,7 +750,7 @@ ALC_API auto ALC_APIENTRY alcIsExtensionPresent(ALCdevice *const device,
     }
 
     auto matchext = [tofind = std::string_view{extname}](std::string_view const entry)
-    { return tofind.size() == entry.size() and is_eq(al::case_compare(tofind, entry)); };
+    { return tofind.size() == entry.size() && al::case_compare(tofind, entry) == 0; };
     return std::ranges::any_of(GetExtensionArray(), matchext) ? ALC_TRUE : ALC_FALSE;
 }
 
@@ -828,7 +827,7 @@ ALC_API auto ALC_APIENTRY alcGetString(ALCdevice *const device, ALCenum const pa
                 || drv.alcIsExtensionPresent(nullptr, "ALC_ENUMERATION_EXT"))
                 DevicesList.appendDeviceList(drv.alcGetString(nullptr, ALC_DEVICE_SPECIFIER), idx);
             ++idx;
-        }, al::dereference{});
+        }, &DriverIfacePtr::operator*);
         DevicesList.finishEnumeration();
         return DevicesList.getNameData();
     }
@@ -852,7 +851,7 @@ ALC_API auto ALC_APIENTRY alcGetString(ALCdevice *const device, ALCenum const pa
                 AllDevicesList.appendDeviceList(
                     drv.alcGetString(nullptr, ALC_DEVICE_SPECIFIER), idx);
             ++idx;
-        }, al::dereference{});
+        }, &DriverIfacePtr::operator*);
         AllDevicesList.finishEnumeration();
         return AllDevicesList.getNameData();
     }
@@ -870,7 +869,7 @@ ALC_API auto ALC_APIENTRY alcGetString(ALCdevice *const device, ALCenum const pa
                 CaptureDevicesList.appendDeviceList(
                     drv.alcGetString(nullptr, ALC_CAPTURE_DEVICE_SPECIFIER), idx);
             ++idx;
-        }, al::dereference{});
+        }, &DriverIfacePtr::operator*);
         CaptureDevicesList.finishEnumeration();
         return CaptureDevicesList.getNameData();
     }
@@ -881,7 +880,7 @@ ALC_API auto ALC_APIENTRY alcGetString(ALCdevice *const device, ALCenum const pa
         {
             return drv.ALCVer >= MakeALCVer(1, 1)
                 || drv.alcIsExtensionPresent(nullptr, "ALC_ENUMERATION_EXT");
-        }, al::dereference{});
+        }, &DriverIfacePtr::operator*);
         if(iter != DriverList.end())
             return (*iter)->alcGetString(nullptr, ALC_DEFAULT_DEVICE_SPECIFIER);
         return "";
@@ -892,7 +891,7 @@ ALC_API auto ALC_APIENTRY alcGetString(ALCdevice *const device, ALCenum const pa
         auto const iter = std::ranges::find_if(DriverList, [](const DriverIface &drv)
         {
             return drv.alcIsExtensionPresent(nullptr, "ALC_ENUMERATE_ALL_EXT") != ALC_FALSE;
-        }, al::dereference{});
+        }, &DriverIfacePtr::operator*);
         if(iter != DriverList.end())
             return (*iter)->alcGetString(nullptr, ALC_DEFAULT_ALL_DEVICES_SPECIFIER);
         return "";
@@ -904,7 +903,7 @@ ALC_API auto ALC_APIENTRY alcGetString(ALCdevice *const device, ALCenum const pa
         {
             return drv.ALCVer >= MakeALCVer(1, 1)
                 || drv.alcIsExtensionPresent(nullptr, "ALC_EXT_CAPTURE");
-        }, al::dereference{});
+        }, &DriverIfacePtr::operator*);
         if(iter != DriverList.end())
             return (*iter)->alcGetString(nullptr, ALC_CAPTURE_DEFAULT_DEVICE_SPECIFIER);
         return "";
@@ -1012,7 +1011,7 @@ ALC_API auto ALC_APIENTRY alcCaptureOpenDevice(ALCchar const *const devicename,
                 return true;
             }
             return false;
-        }, al::dereference{});
+        }, &DriverIfacePtr::operator*);
         if(iter == DriverList.end())
         {
             LastError.store(ALC_INVALID_DEVICE);
@@ -1157,7 +1156,7 @@ ALC_API auto ALC_APIENTRY alcLoopbackOpenDeviceSOFT(ALCchar const *const deviceN
                 return true;
             }
             return false;
-        }, al::dereference{});
+        }, &DriverIfacePtr::operator*);
         if(iter == DriverList.end())
         {
             LastError.store(ALC_INVALID_DEVICE);

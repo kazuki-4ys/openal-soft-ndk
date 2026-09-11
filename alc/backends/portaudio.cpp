@@ -31,15 +31,12 @@
 #include "core/device.h"
 #include "dynload.h"
 #include "ringbuffer.h"
-#include "zstring_view.hpp"
 
 #include <portaudio.h>
 
 #if HAVE_CXXMODULES
-import format.zsv;
 import logging;
 #else
-#include "alformatzsv.hpp"
 #include "core/logging.h"
 #endif
 
@@ -448,7 +445,7 @@ auto PortBackendFactory::init() -> bool
 #if HAVE_DYNLOAD
     if(!pa_handle)
     {
-        auto constexpr pa_lib = al::zstring_view{PA_LIB};
+        auto *const pa_lib = gsl::czstring{PA_LIB};
         if(auto const libresult = LoadLib(pa_lib))
             pa_handle = libresult.value();
         else
@@ -457,19 +454,21 @@ auto PortBackendFactory::init() -> bool
             return false;
         }
 
-        static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name)
-            -> bool
+        static constexpr auto load_func = [](auto *&func, gsl::czstring const name) -> bool
         {
-            return GetSymbolAddress<T>(pa_handle, name)
-                .transform_error([name](std::string_view const err) {
-                    WARN("Failed to load symbol {}: {}", name, err);
-                    return false;
-                })
-                .transform([&func](T *addr) { func = addr; })
-                .has_value();
+            using func_t = std::remove_reference_t<decltype(func)>;
+            auto const funcresult = GetSymbol(pa_handle, name);
+            if(!funcresult)
+            {
+                WARN("Failed to load function {}: {}", name, funcresult.error());
+                return false;
+            }
+            /* NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) */
+            func = reinterpret_cast<func_t>(funcresult.value());
+            return true;
         };
         auto ok = true;
-#define LOAD_FUNC(f) ok &= load_sym(p##f, #f)
+#define LOAD_FUNC(f) ok &= load_func(p##f, #f)
         LOAD_FUNC(Pa_Initialize);
         LOAD_FUNC(Pa_Terminate);
         LOAD_FUNC(Pa_GetErrorText);

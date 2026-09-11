@@ -46,17 +46,14 @@
 #include "gsl/gsl"
 #include "opthelpers.h"
 #include "ringbuffer.h"
-#include "zstring_view.hpp"
 
 #include <SLES/OpenSLES.h>
 #include <SLES/OpenSLES_Android.h>
 #include <SLES/OpenSLES_AndroidConfiguration.h>
 
 #if HAVE_CXXMODULES
-import format.zsv;
 import logging;
 #else
-#include "alformatzsv.hpp"
 #include "core/logging.h"
 #endif
 
@@ -936,7 +933,7 @@ auto OSLBackendFactory::init() -> bool
 #if HAVE_DYNLOAD
     if(!sles_handle)
     {
-        auto constexpr sles_lib = al::zstring_view{SLES_LIB};
+        auto *const sles_lib = gsl::czstring{SLES_LIB};
         if(auto const libresult = LoadLib(sles_lib))
             sles_handle = libresult.value();
         else
@@ -945,19 +942,21 @@ auto OSLBackendFactory::init() -> bool
             return false;
         }
 
-        static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name)
-            -> bool
+        static constexpr auto load_func = [](auto *&func, gsl::czstring const name) -> bool
         {
-            return GetSymbolAddress<T>(sles_handle, name)
-                .transform_error([name](std::string_view const err) {
-                    WARN("Failed to load symbol {}: {}", name, err);
-                    return false;
-                })
-                .transform([&func](T *addr) { func = addr; })
-                .has_value();
+            using func_t = std::remove_reference_t<decltype(func)>;
+            auto const funcresult = GetSymbol(sles_handle, name);
+            if(!funcresult)
+            {
+                WARN("Failed to load function {}: {}", name, funcresult.error());
+                return false;
+            }
+            /* NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) */
+            func = reinterpret_cast<func_t>(funcresult.value());
+            return true;
         };
         auto ok = true;
-#define LOAD_FUNC(f) ok &= load_sym(p##f, #f)
+#define LOAD_FUNC(f) ok &= load_func(p##f, #f)
         SLES_SYMBOLS(LOAD_FUNC)
 #undef LOAD_FUNC
         if(!ok)

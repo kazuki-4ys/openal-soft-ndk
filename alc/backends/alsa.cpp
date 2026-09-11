@@ -45,15 +45,12 @@
 #include "dynload.h"
 #include "gsl/gsl"
 #include "ringbuffer.h"
-#include "zstring_view.hpp"
 
 #include <alsa/asoundlib.h>
 
 #if HAVE_CXXMODULES
-import format.zsv;
 import logging;
 #else
-#include "alformatzsv.hpp"
 #include "core/logging.h"
 #endif
 
@@ -140,11 +137,11 @@ using namespace std::string_view_literals;
     MAGIC(snd_ctl_card_info_get_name);                                        \
     MAGIC(snd_ctl_card_info_get_id);                                          \
     MAGIC(snd_card_next);                                                     \
-    MAGIC(snd_config_update_free_global);
+    MAGIC(snd_config_update_free_global)
 
 void *alsa_handle;
 #define MAKE_FUNC(f) decltype(f) * p##f
-ALSA_FUNCS(MAKE_FUNC)
+ALSA_FUNCS(MAKE_FUNC);
 #undef MAKE_FUNC
 
 #ifndef IN_IDE_PARSER
@@ -1169,7 +1166,7 @@ auto AlsaBackendFactory::init() -> bool
 #if HAVE_DYNLOAD
     if(!alsa_handle)
     {
-        auto constexpr alsa_lib = al::zstring_view{ALSA_LIB};
+        auto *const alsa_lib = gsl::czstring{ALSA_LIB};
         if(auto const libresult = LoadLib(alsa_lib))
             alsa_handle = libresult.value();
         else
@@ -1178,20 +1175,22 @@ auto AlsaBackendFactory::init() -> bool
             return false;
         }
 
-        static constexpr auto load_sym = []<typename T>(T *&func, al::zstring_view const name)
-            -> bool
+        static constexpr auto load_func = [](auto *&func, gsl::czstring const name) -> bool
         {
-            return GetSymbolAddress<T>(alsa_handle, name)
-                .transform_error([name](std::string_view const err) {
-                    WARN("Failed to load symbol {}: {}", name, err);
-                    return false;
-                })
-                .transform([&func](T *addr) { func = addr; })
-                .has_value();
+            using func_t = std::remove_reference_t<decltype(func)>;
+            auto const funcresult = GetSymbol(alsa_handle, name);
+            if(!funcresult)
+            {
+                WARN("Failed to load function {}: {}", name, funcresult.error());
+                return false;
+            }
+            /* NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) */
+            func = reinterpret_cast<func_t>(funcresult.value());
+            return true;
         };
         auto ok = true;
-#define LOAD_FUNC(f) ok &= load_sym(p##f, #f)
-        ALSA_FUNCS(LOAD_FUNC)
+#define LOAD_FUNC(f) ok &= load_func(p##f, #f)
+        ALSA_FUNCS(LOAD_FUNC);
 #undef LOAD_FUNC
         if(!ok)
         {

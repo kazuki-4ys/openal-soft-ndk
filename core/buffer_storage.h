@@ -6,7 +6,6 @@
 
 #include "alnumeric.h"
 #include "fmt_traits.h"
-#include "opthelpers.h"
 #include "storage_formats.h"
 
 
@@ -32,7 +31,7 @@ constexpr auto Is2DAmbisonic(FmtChannels const chans) noexcept -> bool
 }
 
 
-using CallbackType = auto(*)(void*, void*, int) noexcept NONBLOCKING -> int;
+using CallbackType = auto(*)(void*, void*, int) noexcept -> int;
 
 using SampleVariant = std::variant<std::span<u8>,
     std::span<i16>,

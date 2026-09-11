@@ -52,7 +52,7 @@ struct AmbDecConf {
 
     NOINLINE ~AmbDecConf() = default;
 
-    auto load(std::string_view fname) noexcept -> al::expected<void, std::string>;
+    auto load(const std::string_view fname) noexcept -> al::expected<std::monostate,std::string>;
 };
 
 #endif /* CORE_AMBDEC_H */

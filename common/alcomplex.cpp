@@ -107,8 +107,7 @@ constexpr auto gArgAngle = std::array<std::complex<T>, gBitReverses.size()-1>{{
 
 } // namespace
 
-void complex_fft(std::span<std::complex<double>> const buffer, double const sign) noexcept
-    NONBLOCKING
+void complex_fft(std::span<std::complex<double>> const buffer, double const sign)
 {
     auto const fftsize = buffer.size();
     /* Get the number of bits used for indexing. Simplifies bit-reversal and
@@ -196,7 +195,7 @@ void complex_fft(std::span<std::complex<double>> const buffer, double const sign
     }
 }
 
-void complex_hilbert(std::span<std::complex<double>> const buffer) noexcept NONBLOCKING
+void complex_hilbert(std::span<std::complex<double>> const buffer)
 {
     inverse_fft(buffer);
 

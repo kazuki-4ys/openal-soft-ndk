@@ -69,7 +69,7 @@ alignas(16) constexpr std::array<std::array<float, NumLines>, NumLines> A2B{{
 }};
 
 
-struct DistortionState final : EffectState {
+struct DistortionState final : public EffectState {
     struct OutParams {
         unsigned mTargetChannel{InvalidChannelIndex.c_val};
 
@@ -104,9 +104,9 @@ struct DistortionState final : EffectState {
 
     void deviceUpdate(const DeviceBase *device, const BufferStorage *buffer) override;
     void update(const ContextBase *context, const EffectSlotBase *slot, const EffectProps *props,
-        EffectTarget target) noexcept NONBLOCKING override;
+        EffectTarget target) override;
     void process(size_t samplesToDo, std::span<const FloatBufferLine> samplesIn,
-        std::span<FloatBufferLine> samplesOut) noexcept override;
+        std::span<FloatBufferLine> samplesOut) override;
 };
 
 void DistortionState::deviceUpdate(DeviceBase const *const device, const BufferStorage*)
@@ -123,8 +123,7 @@ void DistortionState::deviceUpdate(DeviceBase const *const device, const BufferS
         auto const splitter = BandSplitter{device->mXOverFreq
             / static_cast<float>(device->mSampleRate)};
 
-        using upsampler_t = decltype(mUpsampler)::value_type;
-        auto &upsampler = mUpsampler.emplace(upsampler_t{});
+        auto &upsampler = mUpsampler.emplace();
         for(auto &chandata : upsampler)
         {
             chandata.mHfScale = hfscales[idx];
@@ -136,9 +135,9 @@ void DistortionState::deviceUpdate(DeviceBase const *const device, const BufferS
 }
 
 void DistortionState::update(const ContextBase *context, const EffectSlotBase *slot,
-    const EffectProps *props_, const EffectTarget target) noexcept NONBLOCKING
+    const EffectProps *props_, const EffectTarget target)
 {
-    auto &props = IGNORE_FUNCTION_EFFECTS(std::get<DistortionProps>(*props_));
+    auto &props = std::get<DistortionProps>(*props_);
     auto const device = al::get_not_null(context->mDevice);
 
     /* Store waveshaper edge settings. */
@@ -180,7 +179,7 @@ void DistortionState::update(const ContextBase *context, const EffectSlotBase *s
 
     if(mUpsampler.has_value())
     {
-        auto &upsampler = *mUpsampler;
+        auto &upsampler = mUpsampler.value();
         const auto upmatrix = std::span{AmbiScale::FirstOrderUp};
 
         auto const outgain = slot->Gain * props.Gain;
@@ -194,7 +193,6 @@ void DistortionState::update(const ContextBase *context, const EffectSlotBase *s
 
 void DistortionState::process(const size_t samplesToDo,
     const std::span<const FloatBufferLine> samplesIn, const std::span<FloatBufferLine> samplesOut)
-    noexcept NONBLOCKING
 {
     /* Convert B-Format to A-Format for processing. */
     const auto numInput = std::min(samplesIn.size(), NumLines);
@@ -278,7 +276,7 @@ void DistortionState::process(const size_t samplesToDo,
     /* Now, mix the processed sound data to the output. */
     if(mUpsampler.has_value())
     {
-        auto &upsampler = *mUpsampler;
+        auto &upsampler = mUpsampler.value();
         auto chandata = mChans.begin();
         for(const auto c : std::views::iota(0_uz, NumLines))
         {

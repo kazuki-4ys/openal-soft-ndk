@@ -29,7 +29,6 @@ using namespace std::string_view_literals;
 
 struct OboePlayback final : BackendBase, oboe::AudioStreamCallback {
     explicit OboePlayback(gsl::not_null<DeviceBase*> const device) : BackendBase{device} { }
-    ~OboePlayback() override;
 
     std::shared_ptr<oboe::AudioStream> mStream;
 
@@ -43,13 +42,6 @@ struct OboePlayback final : BackendBase, oboe::AudioStreamCallback {
     void start() override;
     void stop() override;
 };
-
-
-OboePlayback::~OboePlayback()
-{
-    if(mStream)
-        mStream->close();
-}
 
 
 auto OboePlayback::onAudioReady(oboe::AudioStream *const oboeStream, void *const audioData,
@@ -85,19 +77,11 @@ void OboePlayback::open(std::string_view name)
         throw al::backend_exception{al::backend_error::DeviceError, "Failed to create stream: {}",
             oboe::convertToText(result)};
 
-    stream->close();
-
     mDeviceName = name;
 }
 
 auto OboePlayback::reset() -> bool
 {
-    if(mStream)
-    {
-        mStream->close();
-        mStream.reset();
-    }
-
     auto builder = oboe::AudioStreamBuilder{};
     builder.setDirection(oboe::Direction::Output);
     builder.setPerformanceMode(oboe::PerformanceMode::LowLatency);
@@ -234,7 +218,6 @@ void OboePlayback::stop()
 
 struct OboeCapture final : BackendBase, oboe::AudioStreamCallback {
     explicit OboeCapture(gsl::not_null<DeviceBase*> const device) : BackendBase{device} { }
-    ~OboeCapture() override;
 
     std::shared_ptr<oboe::AudioStream> mStream;
 
@@ -249,13 +232,6 @@ struct OboeCapture final : BackendBase, oboe::AudioStreamCallback {
     void captureSamples(std::span<std::byte> outbuffer) override;
     auto availableSamples() -> std::size_t override;
 };
-
-OboeCapture::~OboeCapture()
-{
-    if(mStream)
-        mStream->close();
-}
-
 
 auto OboeCapture::onAudioReady(oboe::AudioStream*, void *const audioData, int32_t const numFrames)
     -> oboe::DataCallbackResult

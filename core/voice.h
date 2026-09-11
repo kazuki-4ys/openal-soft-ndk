@@ -20,7 +20,7 @@
 #include "filters/splitter.h"
 #include "mixer/defs.h"
 #include "mixer/hrtfdefs.h"
-#include "resampler_limits.hpp"
+#include "resampler_limits.h"
 #include "vector.h"
 
 struct ContextBase;
@@ -262,7 +262,7 @@ struct Voice {
     Voice& operator=(Voice const&) = delete;
 
     void mix(State vstate, ContextBase *context, std::chrono::nanoseconds deviceTime,
-        unsigned samplesToDo) noexcept NONBLOCKING;
+        unsigned samplesToDo);
 
     void prepare(DeviceBase *device);
 

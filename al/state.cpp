@@ -159,34 +159,26 @@ constexpr auto ALenumFromDistanceModel(DistanceModel model) -> ALenum
         al::to_underlying(model))};
 }
 
-enum class PropertyValue : ALenum {
-    DopplerFactor = AL_DOPPLER_FACTOR,
-    DopplerVelocity = AL_DOPPLER_VELOCITY,
-    DistanceModel = AL_DISTANCE_MODEL,
-    SpeedOfSound = AL_SPEED_OF_SOUND,
-    DeferredUpdates = AL_DEFERRED_UPDATES_SOFT,
-    GainLimit = AL_GAIN_LIMIT_SOFT,
-    NumResamplers = AL_NUM_RESAMPLERS_SOFT,
-    DefaultResampler = AL_DEFAULT_RESAMPLER_SOFT,
-    DebugLoggedMessages = AL_DEBUG_LOGGED_MESSAGES_EXT,
-    DebugNextLoggedMessageLength = AL_DEBUG_NEXT_LOGGED_MESSAGE_LENGTH_EXT,
-    MaxDebugMessageLength = AL_MAX_DEBUG_MESSAGE_LENGTH_EXT,
-    MaxDebugLoggedMessages = AL_MAX_DEBUG_LOGGED_MESSAGES_EXT,
-    MaxDebugGroupStackDepth = AL_MAX_DEBUG_GROUP_STACK_DEPTH_EXT,
-    MaxLabelLength = AL_MAX_LABEL_LENGTH_EXT,
-    ContextFlags = AL_CONTEXT_FLAGS_EXT,
+enum PropertyValue : ALenum {
+    DopplerFactorProp = AL_DOPPLER_FACTOR,
+    DopplerVelocityProp = AL_DOPPLER_VELOCITY,
+    DistanceModelProp = AL_DISTANCE_MODEL,
+    SpeedOfSoundProp = AL_SPEED_OF_SOUND,
+    DeferredUpdatesProp = AL_DEFERRED_UPDATES_SOFT,
+    GainLimitProp = AL_GAIN_LIMIT_SOFT,
+    NumResamplersProp = AL_NUM_RESAMPLERS_SOFT,
+    DefaultResamplerProp = AL_DEFAULT_RESAMPLER_SOFT,
+    DebugLoggedMessagesProp = AL_DEBUG_LOGGED_MESSAGES_EXT,
+    DebugNextLoggedMessageLengthProp = AL_DEBUG_NEXT_LOGGED_MESSAGE_LENGTH_EXT,
+    MaxDebugMessageLengthProp = AL_MAX_DEBUG_MESSAGE_LENGTH_EXT,
+    MaxDebugLoggedMessagesProp = AL_MAX_DEBUG_LOGGED_MESSAGES_EXT,
+    MaxDebugGroupDepthProp = AL_MAX_DEBUG_GROUP_STACK_DEPTH_EXT,
+    MaxLabelLengthProp = AL_MAX_LABEL_LENGTH_EXT,
+    ContextFlagsProp = AL_CONTEXT_FLAGS_EXT,
 #if ALSOFT_EAX
-    EaxRamSize = AL_EAX_RAM_SIZE,
-    EaxRamFree = AL_EAX_RAM_FREE,
+    EaxRamSizeProp = AL_EAX_RAM_SIZE,
+    EaxRamFreeProp = AL_EAX_RAM_FREE,
 #endif
-};
-
-enum class PropertyPtrValue : ALenum {
-    EventCallbackFunction = AL_EVENT_CALLBACK_FUNCTION_SOFT,
-    EventCallbackUserParam = AL_EVENT_CALLBACK_USER_PARAM_SOFT,
-
-    DebugCallbackFunction = AL_DEBUG_CALLBACK_FUNCTION_EXT,
-    DebugCallbackUserParam = AL_DEBUG_CALLBACK_USER_PARAM_EXT,
 };
 
 template<typename T>
@@ -224,11 +216,11 @@ void GetValue(gsl::not_null<al::Context*> context, ALenum pname, T *values) noex
 
     switch(PropertyValue{pname})
     {
-    case PropertyValue::DopplerFactor:
+    case AL_DOPPLER_FACTOR:
         *values = cast_value(context->mDopplerFactor);
         return;
 
-    case PropertyValue::DopplerVelocity:
+    case AL_DOPPLER_VELOCITY:
         if(context->mContextFlags.test(ContextFlags::DebugBit)) [[unlikely]]
             context->debugMessage(DebugSource::API, DebugType::DeprecatedBehavior, 0,
                 DebugSeverity::Medium,
@@ -237,38 +229,38 @@ void GetValue(gsl::not_null<al::Context*> context, ALenum pname, T *values) noex
         *values = cast_value(context->mDopplerVelocity);
         return;
 
-    case PropertyValue::SpeedOfSound:
+    case AL_SPEED_OF_SOUND:
         *values = cast_value(context->mSpeedOfSound);
         return;
 
-    case PropertyValue::GainLimit:
+    case AL_GAIN_LIMIT_SOFT:
         *values = cast_value(GainMixMax / context->mGainBoost);
         return;
 
-    case PropertyValue::DeferredUpdates:
+    case AL_DEFERRED_UPDATES_SOFT:
         *values = cast_value(context->mDeferUpdates ? AL_TRUE : AL_FALSE);
         return;
 
-    case PropertyValue::DistanceModel:
+    case AL_DISTANCE_MODEL:
         *values = cast_value(ALenumFromDistanceModel(context->mDistanceModel));
         return;
 
-    case PropertyValue::NumResamplers:
+    case AL_NUM_RESAMPLERS_SOFT:
         *values = cast_value(al::to_underlying(Resampler::Max) + 1);
         return;
 
-    case PropertyValue::DefaultResampler:
+    case AL_DEFAULT_RESAMPLER_SOFT:
         *values = cast_value(al::to_underlying(ResamplerDefault));
         return;
 
-    case PropertyValue::DebugLoggedMessages:
+    case AL_DEBUG_LOGGED_MESSAGES_EXT:
     {
         auto debuglock = std::lock_guard{context->mDebugCbLock};
         *values = cast_value(context->mDebugLog.size());
         return;
     }
 
-    case PropertyValue::DebugNextLoggedMessageLength:
+    case AL_DEBUG_NEXT_LOGGED_MESSAGE_LENGTH_EXT:
     {
         auto debuglock = std::lock_guard{context->mDebugCbLock};
         *values = cast_value(context->mDebugLog.empty() ? 0_uz
@@ -276,37 +268,39 @@ void GetValue(gsl::not_null<al::Context*> context, ALenum pname, T *values) noex
         return;
     }
 
-    case PropertyValue::MaxDebugMessageLength:
+    case AL_MAX_DEBUG_MESSAGE_LENGTH_EXT:
         *values = cast_value(MaxDebugMessageLength);
         return;
 
-    case PropertyValue::MaxDebugLoggedMessages:
+    case AL_MAX_DEBUG_LOGGED_MESSAGES_EXT:
         *values = cast_value(MaxDebugLoggedMessages);
         return;
 
-    case PropertyValue::MaxDebugGroupStackDepth:
+    case AL_MAX_DEBUG_GROUP_STACK_DEPTH_EXT:
         *values = cast_value(MaxDebugGroupDepth);
         return;
 
-    case PropertyValue::MaxLabelLength:
+    case AL_MAX_LABEL_LENGTH_EXT:
         *values = cast_value(MaxObjectLabelLength);
         return;
 
-    case PropertyValue::ContextFlags:
+    case AL_CONTEXT_FLAGS_EXT:
         *values = cast_value(context->mContextFlags.to_ulong());
         return;
 
 #if ALSOFT_EAX
 #define EAX_ERROR "[alGetInteger] EAX not enabled"
 
-    case PropertyValue::EaxRamSize:
+    case AL_EAX_RAM_SIZE:
         if(eax_g_is_enabled)
         {
             *values = cast_value(eax_x_ram_max_size);
             return;
         }
-        [[fallthrough]];
-    case PropertyValue::EaxRamFree:
+        ERR(EAX_ERROR);
+        break;
+
+    case AL_EAX_RAM_FREE:
         if(eax_g_is_enabled)
         {
             auto const device = al::get_not_null(context->mALDevice);
@@ -329,21 +323,23 @@ void GetValue(gsl::not_null<al::Context*> context, ALenum pname, ALvoid **values
     if(!values) [[unlikely]]
         return context->setError(AL_INVALID_VALUE, "NULL pointer");
 
-    switch(PropertyPtrValue{pname})
+    switch(pname)
     {
-    case PropertyPtrValue::EventCallbackFunction:
+    case AL_EVENT_CALLBACK_FUNCTION_SOFT:
         /* NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) */
         *values = reinterpret_cast<void*>(context->mEventCb);
         return;
-    case PropertyPtrValue::EventCallbackUserParam:
+
+    case AL_EVENT_CALLBACK_USER_PARAM_SOFT:
         *values = context->mEventParam;
         return;
 
-    case PropertyPtrValue::DebugCallbackFunction:
+    case AL_DEBUG_CALLBACK_FUNCTION_EXT:
         /* NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) */
         *values = reinterpret_cast<void*>(context->mDebugCb);
         return;
-    case PropertyPtrValue::DebugCallbackUserParam:
+
+    case AL_DEBUG_CALLBACK_USER_PARAM_EXT:
         *values = context->mDebugParam;
         return;
     }

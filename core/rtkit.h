@@ -29,67 +29,52 @@
 ***/
 
 #include <memory>
-#include <system_error>
 #include <sys/types.h>
-
-#include "expected.hpp"
 
 struct DBusConnection;
 
-/* Return type used by the RTKit methods. It's an expected<> holding the given
- * type on success, or a std::errc code on failure.
- */
-template<typename T>
-using rtkitret_t = al::expected<T, std::errc>;
-
-class RTKit {
-    struct dbusConnectionDeleter {
-        void operator()(DBusConnection *conn) const;
-    };
-    using dbusConnectionPtr = std::unique_ptr<DBusConnection, dbusConnectionDeleter>;
-
-    dbusConnectionPtr mBus;
-
-public:
-    [[nodiscard]]
-    static auto Create() -> RTKit;
-
-    [[nodiscard]] explicit
-    operator bool() const noexcept { return mBus != nullptr; }
-
-    /* This is mostly equivalent to sched_setparam(thread, SCHED_RR, {
-     * .sched_priority = priority }). 'thread' needs to be a kernel thread
-     * id as returned by gettid(), not a pthread_t! If 'thread' is 0 the
-     * current thread is used.
-     */
-    [[nodiscard]]
-    auto make_realtime(pid_t thread, int priority) const -> rtkitret_t<void>;
-
-    /* This is mostly equivalent to setpriority(PRIO_PROCESS, thread,
-     * nice_level). 'thread' needs to be a kernel thread id as returned by
-     * gettid(), not a pthread_t! If 'thread' is 0 the current thread is
-     * used.
-     */
-    [[nodiscard]]
-    auto make_high_priority(pid_t thread, int nice_level) const -> rtkitret_t<void>;
-
-    /* Return the maximum value of realtime priority available. Realtime requests
-     * above this value will fail.
-     */
-    [[nodiscard]]
-    auto get_max_realtime_priority() const -> rtkitret_t<int>;
-
-    /* Retreive the minimum value of nice level available. High prio requests
-     * below this value will fail.
-     */
-    [[nodiscard]]
-    auto get_min_nice_level() const -> rtkitret_t<int>;
-
-    /* Return the maximum value of RLIMIT_RTTIME to set before attempting a
-     * realtime request.
-     */
-    [[nodiscard]]
-    auto get_rttime_usec_max() const -> rtkitret_t<long long>;
+struct dbusConnectionDeleter {
+    void operator()(DBusConnection *conn) const;
 };
+using dbusConnectionPtr = std::unique_ptr<DBusConnection, dbusConnectionDeleter>;
+
+auto rtkit_get_dbus_connection() -> dbusConnectionPtr;
+
+
+/* This is the reference implementation for a client for
+ * RealtimeKit. You don't have to use this, but if do, just copy these
+ * sources into your repository */
+
+#define RTKIT_SERVICE_NAME "org.freedesktop.RealtimeKit1"
+#define RTKIT_OBJECT_PATH "/org/freedesktop/RealtimeKit1"
+
+/* This is mostly equivalent to sched_setparam(thread, SCHED_RR, {
+ * .sched_priority = priority }). 'thread' needs to be a kernel thread
+ * id as returned by gettid(), not a pthread_t! If 'thread' is 0 the
+ * current thread is used. The returned value is a negative errno
+ * style error code, or 0 on success. */
+auto rtkit_make_realtime(DBusConnection *system_bus, pid_t thread, int priority) -> int;
+
+/* This is mostly equivalent to setpriority(PRIO_PROCESS, thread,
+ * nice_level). 'thread' needs to be a kernel thread id as returned by
+ * gettid(), not a pthread_t! If 'thread' is 0 the current thread is
+ * used. The returned value is a negative errno style error code, or 0
+ * on success.*/
+auto rtkit_make_high_priority(DBusConnection *system_bus, pid_t thread, int nice_level) -> int;
+
+/* Return the maximum value of realtime priority available. Realtime requests
+ * above this value will fail. A negative value is an errno style error code.
+ */
+auto rtkit_get_max_realtime_priority(DBusConnection *system_bus) -> int;
+
+/* Retreive the minimum value of nice level available. High prio requests
+ * below this value will fail. The returned value is a negative errno
+ * style error code, or 0 on success.*/
+auto rtkit_get_min_nice_level(DBusConnection *system_bus, int *min_nice_level) -> int;
+
+/* Return the maximum value of RLIMIT_RTTIME to set before attempting a
+ * realtime request. A negative value is an errno style error code.
+ */
+auto rtkit_get_rttime_usec_max(DBusConnection *system_bus) -> long long;
 
 #endif

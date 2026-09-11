@@ -103,17 +103,12 @@ void AutowahEffectHandler::GetParamfv(al::Context *context, const AutowahProps &
 #if ALSOFT_EAX
 namespace {
 
-/* NOLINTNEXTLINE(clazy-copyable-polymorphic) Exceptions must be copyable. */
-struct EaxAutowahException final : EaxException {
-    explicit EaxAutowahException(std::string_view const message)
-        : EaxException{"EAX_AUTOWAH_EFFECT", message}
-    { }
-};
+using AutowahCommitter = EaxCommitter<EaxAutowahCommitter>;
 
 struct AttackTimeValidator {
     void operator()(float flAttackTime) const
     {
-        eax_validate_range<EaxAutowahException>(
+        eax_validate_range<AutowahCommitter::Exception>(
             "Attack Time",
             flAttackTime,
             EAXAUTOWAH_MINATTACKTIME,
@@ -124,7 +119,7 @@ struct AttackTimeValidator {
 struct ReleaseTimeValidator {
     void operator()(float flReleaseTime) const
     {
-        eax_validate_range<EaxAutowahException>(
+        eax_validate_range<AutowahCommitter::Exception>(
             "Release Time",
             flReleaseTime,
             EAXAUTOWAH_MINRELEASETIME,
@@ -135,7 +130,7 @@ struct ReleaseTimeValidator {
 struct ResonanceValidator {
     void operator()(eax_long const lResonance) const
     {
-        eax_validate_range<EaxAutowahException>(
+        eax_validate_range<AutowahCommitter::Exception>(
             "Resonance",
             lResonance,
             EAXAUTOWAH_MINRESONANCE,
@@ -146,7 +141,7 @@ struct ResonanceValidator {
 struct PeakLevelValidator {
     void operator()(eax_long const lPeakLevel) const
     {
-        eax_validate_range<EaxAutowahException>(
+        eax_validate_range<AutowahCommitter::Exception>(
             "Peak Level",
             lPeakLevel,
             EAXAUTOWAH_MINPEAKLEVEL,
@@ -166,11 +161,15 @@ struct AllValidator {
 
 } // namespace
 
-template<> [[noreturn]]
-void EaxAutowahCommitter::fail(std::string_view const message)
-{ throw EaxAutowahException{message}; }
+template<> /* NOLINTNEXTLINE(clazy-copyable-polymorphic) Exceptions must be copyable. */
+struct AutowahCommitter::Exception final : EaxException {
+    explicit Exception(const std::string_view message) : EaxException{"EAX_AUTOWAH_EFFECT", message}
+    { }
+};
 
-template<>
+template<> [[noreturn]]
+void AutowahCommitter::fail(const std::string_view message) { throw Exception{message}; }
+
 auto EaxAutowahCommitter::commit(const EAXAUTOWAHPROPERTIES &props) const -> bool
 {
     if(auto *cur = std::get_if<EAXAUTOWAHPROPERTIES>(&mEaxProps); cur && *cur == props)
@@ -186,7 +185,6 @@ auto EaxAutowahCommitter::commit(const EAXAUTOWAHPROPERTIES &props) const -> boo
     return true;
 }
 
-template<>
 void EaxAutowahCommitter::SetDefaults(EaxEffectProps &props)
 {
     props = EAXAUTOWAHPROPERTIES{
@@ -196,7 +194,6 @@ void EaxAutowahCommitter::SetDefaults(EaxEffectProps &props)
         .lPeakLevel = EAXAUTOWAH_DEFAULTPEAKLEVEL};
 }
 
-template<>
 void EaxAutowahCommitter::Get(const EaxCall &call, const EAXAUTOWAHPROPERTIES &props)
 {
     switch(call.get_property_id())
@@ -211,7 +208,6 @@ void EaxAutowahCommitter::Get(const EaxCall &call, const EAXAUTOWAHPROPERTIES &p
     }
 }
 
-template<>
 void EaxAutowahCommitter::Set(const EaxCall &call, EAXAUTOWAHPROPERTIES &props)
 {
     switch(call.get_property_id())
