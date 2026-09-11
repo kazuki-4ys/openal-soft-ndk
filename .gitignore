@@ -1,15 +1,16 @@
-build*/
-winbuild
-win64build
-.vs/
-
-## kdevelop
-*.kdev4
-
-## qt-creator
-CMakeLists.txt.user*
-
-## CLion
-.idea
-
-__pycache__/
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
